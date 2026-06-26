@@ -53,7 +53,7 @@ function AddShiftForm({
         className="add-shift-input"
       />
       <input
-        placeholder="GV (tùy chọn)"
+        placeholder="GV cố định (tùy chọn)"
         value={teacher}
         onChange={(e) => setTeacher(e.target.value)}
         className="add-shift-input"
@@ -170,7 +170,7 @@ function ScheduleGrid({
                           />
                           <input
                             className="teacher-edit"
-                            placeholder="GV"
+                            placeholder="GV cố định"
                             value={shift.teacher ?? ''}
                             onChange={(e) =>
                               onUpdateShift(shift.id, { teacher: e.target.value || undefined })
@@ -257,7 +257,8 @@ export function ScheduleConfig({
         </div>
       </div>
       <p className="hint">
-        Nhập số nhân sự cần thiết cho từng lớp/ca. Dùng &quot;+ Thêm ca&quot; hoặc nút × để thay đổi lịch khi cần.
+        Nhập số trợ giảng cần cho từng ca. Tên trong ngoặc là giáo viên cố định (không phải TG).
+        Dùng &quot;+ Thêm ca&quot; hoặc nút × để thay đổi lịch khi cần.
       </p>
 
       {facilities.map(({ facility, levels }) => (

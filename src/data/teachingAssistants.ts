@@ -1,0 +1,42 @@
+export interface TeachingAssistant {
+  fullName: string;
+  abbreviation: string;
+}
+
+export const DEFAULT_TEACHING_ASSISTANTS: TeachingAssistant[] = [
+  { fullName: 'Việt Anh', abbreviation: 'Việt Anh' },
+  { fullName: 'Quốc Anh', abbreviation: 'Q.Anh' },
+  { fullName: 'Chinh Danh', abbreviation: 'Danh' },
+  { fullName: 'Trí Dũng', abbreviation: 'Dũng' },
+  { fullName: 'Tiến Đạt', abbreviation: 'T.Đạt' },
+  { fullName: 'Minh Đạt', abbreviation: 'M.Đạt' },
+  { fullName: 'Quang Huy', abbreviation: 'Huy' },
+  { fullName: 'Hoàng Khải', abbreviation: 'Khải' },
+  { fullName: 'Tuấn Khang', abbreviation: 'Khang' },
+  { fullName: 'Minh Khiêm', abbreviation: 'Khiêm' },
+  { fullName: 'Khánh Linh', abbreviation: 'Linh' },
+  { fullName: 'Hồ Hoàng Long', abbreviation: 'H.Long' },
+  { fullName: 'N. Viết Hoàng Long', abbreviation: 'V.Long' },
+  { fullName: 'Duy Luân', abbreviation: 'Luân' },
+  { fullName: 'Triều Minh', abbreviation: 'Minh (VP)' },
+  { fullName: 'Tuyết Nga', abbreviation: 'Nga' },
+  { fullName: 'Thúy Ngân', abbreviation: 'T.Ngân' },
+  { fullName: 'Như Ngọc', abbreviation: 'N.Ngọc' },
+  { fullName: 'Phạm Nguyên', abbreviation: 'Nguyên (L)' },
+  { fullName: 'Triết Nhân', abbreviation: 'Tr.Nhân' },
+  { fullName: 'Hồng Nhung', abbreviation: 'Nhung01' },
+  { fullName: 'Hồng Nhung (2k7)', abbreviation: 'Nhung02' },
+  { fullName: 'Bảo Phương', abbreviation: 'Phương' },
+  { fullName: 'Thiện Phú', abbreviation: 'T.Phú' },
+  { fullName: 'Minh Quang', abbreviation: 'Quang' },
+  { fullName: 'Minh Quân', abbreviation: 'Quân' },
+  { fullName: 'Văn Sáng', abbreviation: 'Sáng' },
+  { fullName: 'Trung Tấn', abbreviation: 'Tấn' },
+  { fullName: 'Hữu Thắng', abbreviation: 'H.Thắng' },
+  { fullName: 'Anh Thịnh', abbreviation: 'Thịnh' },
+  { fullName: 'Minh Thông', abbreviation: 'Thông' },
+  { fullName: 'Hiền Trang', abbreviation: 'H.Trang' },
+  { fullName: 'N. Khắc Minh Tuấn', abbreviation: 'M.Tuấn' },
+  { fullName: 'Đan Vy', abbreviation: 'Đ.Vy' },
+  { fullName: 'Như Ý', abbreviation: 'Ý' },
+];

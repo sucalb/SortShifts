@@ -1,5 +1,8 @@
-import type { Assignment, Shift, StaffMember } from '../types';
-import { countEligibleStaff, isStaffAvailableForShift, shiftsConflict } from './timeUtils';
+import type { Assignment, Shift } from '../types';
+import type { RegistrationGrid } from './registrationUtils';
+import type { SlotOverrides } from './slotAccess';
+import { getEligibleNamesForShift } from './registrationUtils';
+import { shiftsConflict } from './timeUtils';
 
 export interface ScheduleResult {
   assignments: Assignment[];
@@ -11,14 +14,14 @@ export interface ScheduleResult {
   };
 }
 
-function isStaffAssignedToConflictingShift(
-  staffId: string,
+function isNameAssignedToConflictingShift(
+  name: string,
   shift: Shift,
   assignments: Assignment[],
   shifts: Shift[],
 ): boolean {
   const assignedShiftIds = assignments
-    .filter((a) => a.staffIds.includes(staffId))
+    .filter((a) => a.staffIds.includes(name))
     .map((a) => a.shiftId);
 
   return assignedShiftIds.some((assignedId) => {
@@ -31,11 +34,15 @@ function getAssignedCount(shiftId: string, assignments: Assignment[]): number {
   return assignments.find((a) => a.shiftId === shiftId)?.staffIds.length ?? 0;
 }
 
-export function autoSchedule(shifts: Shift[], staff: StaffMember[]): ScheduleResult {
+export function autoSchedule(
+  shifts: Shift[],
+  registrationGrid: RegistrationGrid | undefined,
+  slotOverrides?: SlotOverrides,
+): ScheduleResult {
   const assignments: Assignment[] = [];
   const sortedShifts = [...shifts].sort((a, b) => {
-    const eligibleA = countEligibleStaff(staff, a);
-    const eligibleB = countEligibleStaff(staff, b);
+    const eligibleA = getEligibleNamesForShift(a, registrationGrid, slotOverrides).length;
+    const eligibleB = getEligibleNamesForShift(b, registrationGrid, slotOverrides).length;
     if (eligibleA !== eligibleB) return eligibleA - eligibleB;
     return b.staffNeeded - a.staffNeeded;
   });
@@ -44,19 +51,15 @@ export function autoSchedule(shifts: Shift[], staff: StaffMember[]): ScheduleRes
     const needed = shift.staffNeeded;
     const assigned: string[] = [];
 
-    const candidates = staff
-      .filter(
-        (s) =>
-          isStaffAvailableForShift(s, shift) &&
-          !isStaffAssignedToConflictingShift(s.id, shift, assignments, shifts),
-      )
+    const candidates = getEligibleNamesForShift(shift, registrationGrid, slotOverrides)
+      .filter((name) => !isNameAssignedToConflictingShift(name, shift, assignments, shifts))
       .sort((a, b) => {
         const loadA = assignments.reduce(
-          (sum, asn) => sum + (asn.staffIds.includes(a.id) ? 1 : 0),
+          (sum, asn) => sum + (asn.staffIds.includes(a) ? 1 : 0),
           0,
         );
         const loadB = assignments.reduce(
-          (sum, asn) => sum + (asn.staffIds.includes(b.id) ? 1 : 0),
+          (sum, asn) => sum + (asn.staffIds.includes(b) ? 1 : 0),
           0,
         );
         return loadA - loadB;
@@ -64,8 +67,8 @@ export function autoSchedule(shifts: Shift[], staff: StaffMember[]): ScheduleRes
 
     for (const candidate of candidates) {
       if (assigned.length >= needed) break;
-      if (assigned.includes(candidate.id)) continue;
-      assigned.push(candidate.id);
+      if (assigned.includes(candidate)) continue;
+      assigned.push(candidate);
     }
 
     if (assigned.length > 0) {

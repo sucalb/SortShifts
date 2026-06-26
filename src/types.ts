@@ -25,6 +25,7 @@ export interface Shift {
 export interface StaffMember {
   id: string;
   name: string;
+  abbreviation?: string;
   availability: Record<DayOfWeek, Record<string, boolean>>;
 }
 
@@ -38,4 +39,10 @@ export interface AppState {
   staff: StaffMember[];
   assignments: Assignment[];
   weekStart: string;
+}
+
+export interface ShareInfo {
+  shareId: string;
+  adminToken: string;
+  guestUrl: string;
 }

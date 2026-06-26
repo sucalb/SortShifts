@@ -1,4 +1,5 @@
-import type { Assignment, Shift, StaffMember } from '../types';
+import type { Assignment, Shift } from '../types';
+import { useState } from 'react';
 import {
   DAY_LABELS,
   FACILITY_LABELS,
@@ -9,18 +10,19 @@ import {
 } from '../data/constants';
 import { getShiftTimeSlot } from '../utils/timeUtils';
 import type { ScheduleResult } from '../utils/scheduler';
+import {
+  downloadFile,
+  exportScheduleHtml,
+  exportScheduleText,
+  openPrintableHtml,
+} from '../utils/exportSchedule';
 
 interface Props {
   shifts: Shift[];
-  staff: StaffMember[];
   result: ScheduleResult | null;
   weekStart: string;
   onRunSchedule: () => void;
   onClearAssignments: () => void;
-}
-
-function getStaffName(staff: StaffMember[], id: string): string {
-  return staff.find((s) => s.id === id)?.name || 'Chưa đặt tên';
 }
 
 function AssignmentView({
@@ -28,14 +30,12 @@ function AssignmentView({
   level,
   shifts,
   assignments,
-  staff,
   weekDates,
 }: {
   facility: 'coso1' | 'coso2';
   level: 'cap1' | 'cap2' | 'cap3';
   shifts: Shift[];
   assignments: Assignment[];
-  staff: StaffMember[];
   weekDates: string[];
 }) {
   const key = getScheduleKey(facility, level);
@@ -92,9 +92,9 @@ function AssignmentView({
                             </div>
                             <div className="assigned-staff">
                               {assigned.length > 0 ? (
-                                assigned.map((id) => (
-                                  <span key={id} className="staff-tag">
-                                    {getStaffName(staff, id)}
+                                assigned.map((name) => (
+                                  <span key={name} className="staff-tag">
+                                    {name}
                                   </span>
                                 ))
                               ) : (
@@ -124,13 +124,32 @@ function AssignmentView({
 
 export function ScheduleResultView({
   shifts,
-  staff,
   result,
   weekStart,
   onRunSchedule,
   onClearAssignments,
 }: Props) {
   const weekDates = getWeekDates(weekStart);
+  const [copyMsg, setCopyMsg] = useState('');
+
+  const handleCopyText = async () => {
+    if (!result) return;
+    const text = exportScheduleText(shifts, result, weekStart);
+    await navigator.clipboard.writeText(text);
+    setCopyMsg('Đã copy!');
+    setTimeout(() => setCopyMsg(''), 2000);
+  };
+
+  const handleDownloadHtml = () => {
+    if (!result) return;
+    const html = exportScheduleHtml(shifts, result, weekStart);
+    downloadFile(html, `lich-lam-viec-${weekStart}.html`, 'text/html;charset=utf-8');
+  };
+
+  const handlePrint = () => {
+    if (!result) return;
+    openPrintableHtml(exportScheduleHtml(shifts, result, weekStart));
+  };
 
   return (
     <div className="panel">
@@ -150,7 +169,7 @@ export function ScheduleResultView({
 
       {!result && (
         <div className="empty-state">
-          Nhấn &quot;Xếp lịch tự động&quot; sau khi đã cấu hình số người và đăng ký lịch nhân viên.
+          Nhấn &quot;Xếp lịch tự động&quot; sau khi đã cấu hình ca và điền tên TG vào lịch đăng ký.
         </div>
       )}
 
@@ -195,6 +214,22 @@ export function ScheduleResultView({
             </div>
           )}
 
+          <div className="export-bar">
+            <span className="export-label">Xuất lịch gọn (dễ gửi cho TG):</span>
+            <div className="export-actions">
+              <button className="btn btn-secondary btn-sm" type="button" onClick={handleCopyText}>
+                Copy văn bản
+              </button>
+              <button className="btn btn-secondary btn-sm" type="button" onClick={handleDownloadHtml}>
+                Tải HTML
+              </button>
+              <button className="btn btn-secondary btn-sm" type="button" onClick={handlePrint}>
+                In / xem trước
+              </button>
+              {copyMsg && <span className="copy-feedback">{copyMsg}</span>}
+            </div>
+          </div>
+
           {(['coso1', 'coso2'] as const).map((facility) => (
             <div key={facility} className="facility-block">
               <h2 className="facility-title">
@@ -207,7 +242,6 @@ export function ScheduleResultView({
                   level={level}
                   shifts={shifts}
                   assignments={result.assignments}
-                  staff={staff}
                   weekDates={weekDates}
                 />
               ))}

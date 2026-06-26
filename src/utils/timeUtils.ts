@@ -1,5 +1,6 @@
 import { REGISTRATION_SLOTS, SCHEDULE_SLOTS } from '../data/constants';
 import type { Shift, StaffMember, TimeSlot } from '../types';
+import { isSlotRegistrable, type SlotOverrides } from './slotAccess';
 
 export function timeOverlaps(a: TimeSlot, b: TimeSlot): boolean {
   return a.start < b.end && b.start < a.end;
@@ -25,7 +26,11 @@ export function shiftsConflict(a: Shift, b: Shift): boolean {
   return timeOverlaps(slotA, slotB);
 }
 
-export function isStaffAvailableForShift(staff: StaffMember, shift: Shift): boolean {
+export function isStaffAvailableForShift(
+  staff: StaffMember,
+  shift: Shift,
+  slotOverrides?: SlotOverrides,
+): boolean {
   const shiftSlot = getShiftTimeSlot(shift);
   if (!shiftSlot) return false;
 
@@ -33,10 +38,17 @@ export function isStaffAvailableForShift(staff: StaffMember, shift: Shift): bool
   if (!dayAvail) return false;
 
   return REGISTRATION_SLOTS.some(
-    (regSlot) => dayAvail[regSlot.id] && timeOverlaps(shiftSlot, regSlot),
+    (regSlot) =>
+      isSlotRegistrable(slotOverrides, shift.day, regSlot.id) &&
+      dayAvail[regSlot.id] &&
+      timeOverlaps(shiftSlot, regSlot),
   );
 }
 
-export function countEligibleStaff(staff: StaffMember[], shift: Shift): number {
-  return staff.filter((s) => isStaffAvailableForShift(s, shift)).length;
+export function countEligibleStaff(
+  staff: StaffMember[],
+  shift: Shift,
+  slotOverrides?: SlotOverrides,
+): number {
+  return staff.filter((s) => isStaffAvailableForShift(s, shift, slotOverrides)).length;
 }
