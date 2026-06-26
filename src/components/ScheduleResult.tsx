@@ -215,13 +215,13 @@ export function ScheduleResultView({
           )}
 
           <div className="export-bar">
-            <span className="export-label">Xuất lịch gọn (dễ gửi cho TG):</span>
+            <span className="export-label">Xuất lịch dạng bảng (giống Google Sheets):</span>
             <div className="export-actions">
               <button className="btn btn-secondary btn-sm" type="button" onClick={handleCopyText}>
-                Copy văn bản
+                Copy bảng (text)
               </button>
               <button className="btn btn-secondary btn-sm" type="button" onClick={handleDownloadHtml}>
-                Tải HTML
+                Tải bảng HTML
               </button>
               <button className="btn btn-secondary btn-sm" type="button" onClick={handlePrint}>
                 In / xem trước
