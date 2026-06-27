@@ -79,7 +79,7 @@ export function isRegistrationBlocked(day: DayOfWeek, slotId: string): boolean {
 }
 
 export function getWeekDates(weekStart: string): string[] {
-  const start = new Date(weekStart);
+  const start = new Date(weekStart + 'T12:00:00');
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(start);
     d.setDate(start.getDate() + i);

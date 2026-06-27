@@ -8,29 +8,26 @@ import {
   getScheduleKey,
   getWeekDates,
 } from '../data/constants';
+import { resolveClassColor } from '../utils/classColors';
+import { syncClassColorsFromSheet } from '../utils/sheetAutoFill';
+import type { TeachingAssistant } from '../data/teachingAssistants';
+import { TaPicker } from './TaPicker';
+import { useLocalStorage } from '../hooks/useLocalStorage';
 
 interface Props {
   shifts: Shift[];
   weekStart: string;
+  roster: TeachingAssistant[];
+  classColors: Record<string, string>;
+  onClassColorsChange: (colors: Record<string, string>) => void;
   onUpdateStaffNeeded: (shiftId: string, count: number) => void;
-  onUpdateShift: (shiftId: string, updates: Partial<Pick<Shift, 'className' | 'teacher' | 'staffNeeded'>>) => void;
+  onUpdateShift: (
+    shiftId: string,
+    updates: Partial<Pick<Shift, 'className' | 'teacher' | 'staffNeeded' | 'fixedTaNames'>>,
+  ) => void;
   onAddShift: (shift: Omit<Shift, 'id'>) => void;
   onRemoveShift: (shiftId: string) => void;
   onWeekStartChange: (date: string) => void;
-}
-
-const CLASS_COLORS: Record<string, string> = {
-  '10 B1': '#fff59d',
-  '10 B2': '#f8bbd0',
-  '11 B1': '#c8e6c9',
-  '11 B2': '#e1bee7',
-  '12 B1': '#b3e5fc',
-  '12 B2': '#f8bbd0',
-  '12 B3': '#80deea',
-};
-
-function getClassColor(className: string): string {
-  return CLASS_COLORS[className] ?? '#ffe0b2';
 }
 
 function AddShiftForm({
@@ -90,6 +87,8 @@ function ScheduleGrid({
   level,
   shifts,
   weekDates,
+  classColors,
+  roster,
   onUpdateStaffNeeded,
   onUpdateShift,
   onAddShift,
@@ -99,8 +98,13 @@ function ScheduleGrid({
   level: Level;
   shifts: Shift[];
   weekDates: string[];
+  classColors: Record<string, string>;
+  roster: TeachingAssistant[];
   onUpdateStaffNeeded: (shiftId: string, count: number) => void;
-  onUpdateShift: (shiftId: string, updates: Partial<Pick<Shift, 'className' | 'teacher' | 'staffNeeded'>>) => void;
+  onUpdateShift: (
+    shiftId: string,
+    updates: Partial<Pick<Shift, 'className' | 'teacher' | 'staffNeeded' | 'fixedTaNames'>>,
+  ) => void;
   onAddShift: (shift: Omit<Shift, 'id'>) => void;
   onRemoveShift: (shiftId: string) => void;
 }) {
@@ -108,8 +112,20 @@ function ScheduleGrid({
   const slots = SCHEDULE_SLOTS[key] ?? [];
   const days: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
   const [addingCell, setAddingCell] = useState<string | null>(null);
+  const taOptions = roster.map((t) => t.abbreviation);
 
   const cellKey = (day: DayOfWeek, slotId: string) => `${day}-${slotId}`;
+
+  const addFixedTa = (shift: Shift, name: string) => {
+    const current = shift.fixedTaNames ?? [];
+    if (current.includes(name)) return;
+    onUpdateShift(shift.id, { fixedTaNames: [...current, name] });
+  };
+
+  const removeFixedTa = (shift: Shift, name: string) => {
+    const next = (shift.fixedTaNames ?? []).filter((n) => n !== name);
+    onUpdateShift(shift.id, { fixedTaNames: next.length > 0 ? next : undefined });
+  };
 
   return (
     <div className="schedule-section">
@@ -144,11 +160,16 @@ function ScheduleGrid({
 
                   return (
                     <td key={day} className="schedule-cell">
-                      {cellShifts.map((shift) => (
+                      {cellShifts.map((shift) => {
+                        const fixedTas = shift.fixedTaNames ?? [];
+                        const hasFixed = fixedTas.length > 0;
+                        return (
                         <div
                           key={shift.id}
-                          className="class-block"
-                          style={{ backgroundColor: getClassColor(shift.className) }}
+                          className={`class-block ${hasFixed ? 'class-block--fixed-ta' : ''}`}
+                          style={{
+                            backgroundColor: resolveClassColor(shift.className, classColors),
+                          }}
                         >
                           <button
                             className="shift-remove-btn"
@@ -158,6 +179,7 @@ function ScheduleGrid({
                               }
                             }}
                             title="Bỏ ca này"
+                            type="button"
                           >
                             ×
                           </button>
@@ -188,8 +210,35 @@ function ScheduleGrid({
                               }
                             />
                           </div>
+                          <div className="config-fixed-ta">
+                            <span className="config-fixed-ta-label">TG cố định</span>
+                            {fixedTas.length > 0 && (
+                              <div className="config-fixed-ta-chips">
+                                {fixedTas.map((name) => (
+                                  <span key={name} className="config-fixed-ta-chip">
+                                    {name}
+                                    <button
+                                      type="button"
+                                      className="config-fixed-ta-chip-x"
+                                      onClick={() => removeFixedTa(shift, name)}
+                                      aria-label={`Bỏ ${name}`}
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            <TaPicker
+                              options={taOptions}
+                              exclude={fixedTas}
+                              placeholder="+ TG cố định"
+                              onSelect={(name) => addFixedTa(shift, name)}
+                            />
+                          </div>
                         </div>
-                      ))}
+                        );
+                      })}
                       {isAdding ? (
                         <AddShiftForm
                           onAdd={(className, teacher, staffNeeded) => {
@@ -230,6 +279,9 @@ function ScheduleGrid({
 export function ScheduleConfig({
   shifts,
   weekStart,
+  roster,
+  classColors,
+  onClassColorsChange,
   onUpdateStaffNeeded,
   onUpdateShift,
   onAddShift,
@@ -237,11 +289,39 @@ export function ScheduleConfig({
   onWeekStartChange,
 }: Props) {
   const weekDates = getWeekDates(weekStart);
+  const [webhookUrl] = useLocalStorage('lich-sheets-webhook', '');
+  const [colorMsg, setColorMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [syncingColors, setSyncingColors] = useState(false);
 
   const facilities: { facility: Facility; levels: Level[] }[] = [
     { facility: 'coso1', levels: ['cap3', 'cap2', 'cap1'] },
     { facility: 'coso2', levels: ['cap3', 'cap2', 'cap1'] },
   ];
+
+  const handleSyncColors = async () => {
+    if (!webhookUrl.trim()) {
+      setColorMsg({ type: 'err', text: 'Cần cấu hình URL Apps Script (tab Xếp lịch) trước.' });
+      return;
+    }
+    setSyncingColors(true);
+    setColorMsg(null);
+    try {
+      const res = await syncClassColorsFromSheet(webhookUrl, weekStart);
+      const stored = localStorage.getItem('lich-class-colors');
+      if (stored) onClassColorsChange(JSON.parse(stored) as Record<string, string>);
+      setColorMsg({
+        type: 'ok',
+        text: `Đã đồng bộ ${res.count} màu lớp từ ${res.tab}.`,
+      });
+    } catch (err) {
+      setColorMsg({
+        type: 'err',
+        text: err instanceof Error ? err.message : 'Không đồng bộ được màu.',
+      });
+    } finally {
+      setSyncingColors(false);
+    }
+  };
 
   return (
     <div className="panel">
@@ -257,9 +337,25 @@ export function ScheduleConfig({
         </div>
       </div>
       <p className="hint">
-        Nhập số trợ giảng cần cho từng ca. Tên trong ngoặc là giáo viên cố định (không phải TG).
-        Dùng &quot;+ Thêm ca&quot; hoặc nút × để thay đổi lịch khi cần.
+        Nhập số trợ giảng cần cho từng ca. <strong>TG cố định</strong> trên từng ca — xếp lịch chỉ
+        gán đúng người đó, ca khác sẽ né. GV trong ngoặc là giáo viên dạy (không phải TG).
       </p>
+
+      <div className="config-tools">
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          onClick={handleSyncColors}
+          disabled={syncingColors}
+        >
+          {syncingColors ? 'Đang đồng bộ màu…' : 'Đồng bộ màu lớp từ Sheet'}
+        </button>
+        {colorMsg && (
+          <span className={colorMsg.type === 'ok' ? 'copy-feedback' : 'sheets-error'}>
+            {colorMsg.text}
+          </span>
+        )}
+      </div>
 
       {facilities.map(({ facility, levels }) => (
         <div key={facility} className="facility-block">
@@ -273,6 +369,8 @@ export function ScheduleConfig({
               level={level}
               shifts={shifts}
               weekDates={weekDates}
+              classColors={classColors}
+              roster={roster}
               onUpdateStaffNeeded={onUpdateStaffNeeded}
               onUpdateShift={onUpdateShift}
               onAddShift={onAddShift}

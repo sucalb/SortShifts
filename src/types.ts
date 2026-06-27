@@ -19,6 +19,8 @@ export interface Shift {
   timeSlotId: string;
   className: string;
   teacher?: string;
+  /** TG chỉ xếp cho ca này — không tự gán thêm người khác */
+  fixedTaNames?: string[];
   staffNeeded: number;
 }
 
@@ -33,6 +35,9 @@ export interface Assignment {
   shiftId: string;
   staffIds: string[];
 }
+
+/** GV (uppercase key) → danh sách TG cố định (viết tắt) */
+export type TeacherFixedTaMap = Record<string, string[]>;
 
 export interface AppState {
   shifts: Shift[];

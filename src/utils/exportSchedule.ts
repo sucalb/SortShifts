@@ -18,7 +18,7 @@ const DAY_LABELS_UPPER: Record<DayOfWeek, string> = {
   6: 'CHỦ NHẬT',
 };
 
-const CLASS_COLORS: Record<string, string> = {
+export const CLASS_COLORS: Record<string, string> = {
   '12 B1': '#b8d4f0',
   '11 B1': '#c8e6c9',
   '10 B1': '#fff176',
@@ -67,7 +67,7 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function getClassColor(className: string): string {
+export function getClassColor(className: string): string {
   if (CLASS_COLORS[className]) return CLASS_COLORS[className];
   let hash = 0;
   for (let i = 0; i < className.length; i++) {
@@ -77,7 +77,7 @@ function getClassColor(className: string): string {
   return `hsl(${hue}, 55%, 82%)`;
 }
 
-function formatClassLabel(shift: Shift): string {
+export function formatClassLabel(shift: Shift): string {
   const base = shift.className;
   if (shift.teacher) return `${base} (${shift.teacher})`;
   return base;

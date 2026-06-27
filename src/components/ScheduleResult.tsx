@@ -1,5 +1,6 @@
 import type { Assignment, Shift } from '../types';
 import { useState } from 'react';
+import type { TeachingAssistant } from '../data/teachingAssistants';
 import {
   DAY_LABELS,
   FACILITY_LABELS,
@@ -16,13 +17,125 @@ import {
   exportScheduleText,
   openPrintableHtml,
 } from '../utils/exportSchedule';
+import { resolveClassColor } from '../utils/classColors';
+import {
+  getAssignmentWarnings,
+  hasBlockingWarnings,
+} from '../utils/assignmentValidation';
+import type { RegistrationGrid } from '../utils/registrationUtils';
+import type { SlotOverrides } from '../utils/slotAccess';
+import { SheetsSyncPanel } from './SheetsSyncPanel';
+import { TaPicker } from './TaPicker';
 
 interface Props {
   shifts: Shift[];
   result: ScheduleResult | null;
   weekStart: string;
+  classColors: Record<string, string>;
+  roster: TeachingAssistant[];
+  registrationGrid: RegistrationGrid;
+  slotOverrides: SlotOverrides | undefined;
   onRunSchedule: () => void;
   onClearAssignments: () => void;
+  onUpdateAssignment: (shiftId: string, staffIds: string[]) => void;
+}
+
+function EditableAssignmentBlock({
+  shift,
+  assigned,
+  allAssignments,
+  shifts,
+  classColors,
+  roster,
+  registrationGrid,
+  slotOverrides,
+  onUpdate,
+}: {
+  shift: Shift;
+  assigned: string[];
+  allAssignments: Assignment[];
+  shifts: Shift[];
+  classColors: Record<string, string>;
+  roster: TeachingAssistant[];
+  registrationGrid: RegistrationGrid;
+  slotOverrides: SlotOverrides | undefined;
+  onUpdate: (staffIds: string[]) => void;
+}) {
+  const filled = assigned.length;
+  const missing = shift.staffNeeded - filled;
+  const isPartial = missing > 0 && filled > 0;
+  const isEmpty = filled === 0;
+  const warnings = getAssignmentWarnings(
+    shift,
+    assigned,
+    allAssignments,
+    shifts,
+    registrationGrid,
+    slotOverrides,
+  );
+  const taOptions = roster.map((t) => t.abbreviation);
+
+  const addName = (name: string) => {
+    if (!name || assigned.includes(name)) return;
+    onUpdate([...assigned, name]);
+  };
+
+  return (
+    <div
+      className={`result-block editable ${isEmpty ? 'unfilled' : ''} ${isPartial ? 'partial' : ''} ${hasBlockingWarnings(warnings) ? 'has-warning' : ''}`}
+      style={{ backgroundColor: resolveClassColor(shift.className, classColors) }}
+    >
+                          <div className="class-name">
+                            {shift.className}
+                            {shift.teacher && <span className="teacher"> ({shift.teacher})</span>}
+                            {(shift.fixedTaNames?.length ?? 0) > 0 && (
+                              <span className="fixed-ta-badge-inline" title="TG cố định">
+                                🔒 {shift.fixedTaNames!.join(', ')}
+                              </span>
+                            )}
+                          </div>
+      <div className="assigned-staff">
+        {assigned.length > 0 ? (
+          assigned.map((name) => (
+            <span key={name} className="staff-tag editable">
+              {name}
+              <button
+                type="button"
+                className="staff-tag-remove"
+                onClick={() => onUpdate(assigned.filter((n) => n !== name))}
+                title="Bỏ TG"
+              >
+                ×
+              </button>
+            </span>
+          ))
+        ) : (
+          <span className="no-staff">Chưa xếp</span>
+        )}
+      </div>
+      <div className="assignment-edit-row">
+        <TaPicker
+          options={taOptions}
+          exclude={assigned}
+          placeholder="Thêm TG…"
+          onSelect={addName}
+        />
+      </div>
+      <div className="staff-count">
+        {filled}/{shift.staffNeeded}
+        {missing > 0 && <span className="missing"> (thiếu {missing})</span>}
+      </div>
+      {warnings.length > 0 && (
+        <ul className="assignment-warnings">
+          {warnings.map((w, i) => (
+            <li key={i} className={`warn-${w.type}`}>
+              {w.message}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function AssignmentView({
@@ -31,12 +144,22 @@ function AssignmentView({
   shifts,
   assignments,
   weekDates,
+  classColors,
+  roster,
+  registrationGrid,
+  slotOverrides,
+  onUpdateAssignment,
 }: {
   facility: 'coso1' | 'coso2';
   level: 'cap1' | 'cap2' | 'cap3';
   shifts: Shift[];
   assignments: Assignment[];
   weekDates: string[];
+  classColors: Record<string, string>;
+  roster: TeachingAssistant[];
+  registrationGrid: RegistrationGrid;
+  slotOverrides: SlotOverrides | undefined;
+  onUpdateAssignment: (shiftId: string, staffIds: string[]) => void;
 }) {
   const key = getScheduleKey(facility, level);
   const slots = SCHEDULE_SLOTS[key] ?? [];
@@ -74,40 +197,20 @@ function AssignmentView({
                       {cellShifts.map((shift) => {
                         const asn = assignments.find((a) => a.shiftId === shift.id);
                         const assigned = asn?.staffIds ?? [];
-                        const filled = assigned.length;
-                        const missing = shift.staffNeeded - filled;
-                        const isPartial = missing > 0 && filled > 0;
-                        const isEmpty = filled === 0;
 
                         return (
-                          <div
+                          <EditableAssignmentBlock
                             key={shift.id}
-                            className={`result-block ${isEmpty ? 'unfilled' : ''} ${isPartial ? 'partial' : ''}`}
-                          >
-                            <div className="class-name">
-                              {shift.className}
-                              {shift.teacher && (
-                                <span className="teacher"> ({shift.teacher})</span>
-                              )}
-                            </div>
-                            <div className="assigned-staff">
-                              {assigned.length > 0 ? (
-                                assigned.map((name) => (
-                                  <span key={name} className="staff-tag">
-                                    {name}
-                                  </span>
-                                ))
-                              ) : (
-                                <span className="no-staff">Chưa xếp</span>
-                              )}
-                            </div>
-                            <div className="staff-count">
-                              {filled}/{shift.staffNeeded}
-                              {missing > 0 && (
-                                <span className="missing"> (thiếu {missing})</span>
-                              )}
-                            </div>
-                          </div>
+                            shift={shift}
+                            assigned={assigned}
+                            allAssignments={assignments}
+                            shifts={shifts}
+                            classColors={classColors}
+                            roster={roster}
+                            registrationGrid={registrationGrid}
+                            slotOverrides={slotOverrides}
+                            onUpdate={(staffIds) => onUpdateAssignment(shift.id, staffIds)}
+                          />
                         );
                       })}
                     </td>
@@ -126,8 +229,13 @@ export function ScheduleResultView({
   shifts,
   result,
   weekStart,
+  classColors,
+  roster,
+  registrationGrid,
+  slotOverrides,
   onRunSchedule,
   onClearAssignments,
+  onUpdateAssignment,
 }: Props) {
   const weekDates = getWeekDates(weekStart);
   const [copyMsg, setCopyMsg] = useState('');
@@ -175,6 +283,11 @@ export function ScheduleResultView({
 
       {result && (
         <>
+          <p className="edit-mode-hint">
+            Bạn có thể sửa TG trực tiếp trên từng ca. Gõ tên để tìm — cảnh báo đỏ = trùng ca hoặc
+            vượt số người.
+          </p>
+
           <div className="stats-bar">
             <div className="stat">
               <span className="stat-value">{result.stats.totalShifts}</span>
@@ -230,6 +343,8 @@ export function ScheduleResultView({
             </div>
           </div>
 
+          <SheetsSyncPanel shifts={shifts} result={result} weekStart={weekStart} />
+
           {(['coso1', 'coso2'] as const).map((facility) => (
             <div key={facility} className="facility-block">
               <h2 className="facility-title">
@@ -243,6 +358,11 @@ export function ScheduleResultView({
                   shifts={shifts}
                   assignments={result.assignments}
                   weekDates={weekDates}
+                  classColors={classColors}
+                  roster={roster}
+                  registrationGrid={registrationGrid}
+                  slotOverrides={slotOverrides}
+                  onUpdateAssignment={onUpdateAssignment}
                 />
               ))}
             </div>

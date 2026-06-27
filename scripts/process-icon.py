@@ -1,100 +1,91 @@
-"""Remove white background and generate app icons from URANUS logo."""
+"""Generate URANUS app icons (neo-brutalist calendar theme) for public/."""
 from __future__ import annotations
 
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
-SRC = Path(
-    r"C:\Users\hoang.bui\.cursor\projects\c-Users-hoang-bui-Downloads\assets"
-    r"\c__Users_hoang.bui_AppData_Roaming_Cursor_User_workspaceStorage_119cde71cd3306a74fba3992cfc6a399_images_Screenshot_2026-05-29_191556-940df461-10e7-4b90-adf4-7231b10986b0.png"
-)
 OUT_DIR = Path(__file__).resolve().parent.parent / "public"
 
-
-def is_background_pixel(r: int, g: int, b: int, a: int, tolerance: int = 28) -> bool:
-    if a < 10:
-        return True
-    return r >= 255 - tolerance and g >= 255 - tolerance and b >= 255 - tolerance
-
-
-def remove_background(img: Image.Image, tolerance: int = 28) -> Image.Image:
-    rgba = img.convert("RGBA")
-    w, h = rgba.size
-    data = rgba.load()
-    visited: set[tuple[int, int]] = set()
-    stack: list[tuple[int, int]] = []
-
-    for x in range(w):
-        stack.append((x, 0))
-        stack.append((x, h - 1))
-    for y in range(h):
-        stack.append((0, y))
-        stack.append((w - 1, y))
-
-    while stack:
-        x, y = stack.pop()
-        if (x, y) in visited:
-            continue
-        if x < 0 or x >= w or y < 0 or y >= h:
-            continue
-        visited.add((x, y))
-        r, g, b, a = data[x, y]
-        if not is_background_pixel(r, g, b, a, tolerance):
-            continue
-        data[x, y] = (r, g, b, 0)
-        stack.extend([(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)])
-
-    return rgba
+BG = "#fff7f0"
+BLACK = "#101010"
+ACCENT = "#553bee"
+ACCENT_DARK = "#4029c9"
+ACCENT_SOFT = "#ebe8ff"
+TEAL = "#2a8179"
+WHITE = "#ffffff"
 
 
-def trim_transparent(img: Image.Image, padding: int = 8) -> Image.Image:
-    bbox = img.getbbox()
-    if not bbox:
-        return img
-    left = max(0, bbox[0] - padding)
-    top = max(0, bbox[1] - padding)
-    right = min(img.width, bbox[2] + padding)
-    bottom = min(img.height, bbox[3] + padding)
-    return img.crop((left, top, right, bottom))
+def _rect(draw: ImageDraw.ImageDraw, box: tuple[float, float, float, float], fill: str, outline: str | None = None, width: int = 0) -> None:
+    if outline and width:
+        draw.rectangle(box, fill=fill, outline=outline, width=width)
+    else:
+        draw.rectangle(box, fill=fill)
 
 
-def fit_square(img: Image.Image, size: int) -> Image.Image:
-    canvas = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    scale = min(size / img.width, size / img.height) * 0.88
-    new_w = max(1, int(img.width * scale))
-    new_h = max(1, int(img.height * scale))
-    resized = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-    offset = ((size - new_w) // 2, (size - new_h) // 2)
-    canvas.paste(resized, offset, resized)
-    return canvas
+def draw_icon(size: int) -> Image.Image:
+    img = Image.new("RGBA", (size, size), BG)
+    draw = ImageDraw.Draw(img)
+    s = size / 512
 
+    def R(x: float, y: float, w: float, h: float) -> tuple[int, int, int, int]:
+        return (int(x * s), int(y * s), int((x + w) * s), int((y + h) * s))
 
-def crop_symbol(img: Image.Image) -> Image.Image:
-    """Use upper portion (U mark) for tiny favicon sizes."""
-    w, h = img.size
-    return img.crop((0, 0, w, int(h * 0.72)))
+    stroke = max(1, round(14 * s))
+    thin = max(1, round(8 * s))
+    tab_stroke = max(1, round(10 * s))
+
+    _rect(draw, R(108, 124, 296, 296), BLACK)
+    _rect(draw, R(92, 108, 296, 296), ACCENT, BLACK, stroke)
+    _rect(draw, R(92, 108, 296, 72), ACCENT_DARK, BLACK, stroke)
+    _rect(draw, R(132, 76, 36, 52), ACCENT, BLACK, tab_stroke)
+    _rect(draw, R(312, 76, 36, 52), ACCENT, BLACK, tab_stroke)
+
+    if size >= 48:
+        _rect(draw, R(124, 204, 88, 56), ACCENT_SOFT, BLACK, thin)
+        _rect(draw, R(228, 204, 88, 56), ACCENT_SOFT, BLACK, thin)
+        _rect(draw, R(332, 204, 48, 56), TEAL, BLACK, thin)
+        _rect(draw, R(124, 276, 88, 56), ACCENT_SOFT, BLACK, thin)
+        _rect(draw, R(228, 276, 88, 56), ACCENT_SOFT, BLACK, thin)
+        _rect(draw, R(332, 276, 48, 56), ACCENT_SOFT, BLACK, thin)
+        _rect(draw, R(124, 348, 256, 40), WHITE, BLACK, thin)
+
+        bar = max(2, round(20 * s))
+        ux0, uy0, ux1, uy1 = R(168, 362, 28, 18)[0], R(168, 362, 28, 18)[1], R(196, 380, 0, 0)[2], R(168, 380, 56, 30)[3]
+        draw.rectangle((ux0, uy0, ux0 + bar, uy1 + int(18 * s)), fill=ACCENT)
+        draw.rectangle((ux1 - bar, uy0, ux1, uy1 + int(18 * s)), fill=ACCENT)
+        draw.rectangle((ux0, uy1 + int(10 * s), ux1, uy1 + int(18 * s)), fill=ACCENT)
+    else:
+        inner = R(140, 170, 200, 200)
+        _rect(draw, inner, ACCENT_SOFT, BLACK, max(1, round(6 * s)))
+        bar = max(2, round(size * 0.12))
+        x0, y0, x1, y1 = inner
+        cx = (x0 + x1) // 2
+        cy = (y0 + y1) // 2 + int(size * 0.06)
+        half = int(size * 0.16)
+        top = cy - half
+        bottom = cy + half
+        draw.rectangle((cx - half, top, cx - half + bar, bottom), fill=WHITE)
+        draw.rectangle((cx + half - bar, top, cx + half, bottom), fill=WHITE)
+        draw.rectangle((cx - half, bottom - bar, cx + half, bottom), fill=WHITE)
+
+    return img.convert("RGB")
 
 
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    source = Image.open(SRC)
-    cleaned = trim_transparent(remove_background(source))
-    cleaned.save(OUT_DIR / "uranus-logo.png", optimize=True)
-
-    symbol = trim_transparent(crop_symbol(cleaned), padding=4)
 
     sizes = {
-        "favicon-32.png": 32,
         "favicon.png": 32,
+        "favicon-32.png": 32,
         "apple-touch-icon.png": 180,
         "icon-192.png": 192,
         "icon-512.png": 512,
         "icon.png": 256,
     }
-    for name, size in sizes.items():
-        base = symbol if size <= 32 else cleaned
-        fit_square(base, size).save(OUT_DIR / name, optimize=True)
+
+    for name, px in sizes.items():
+        draw_icon(px).save(OUT_DIR / name, optimize=True)
 
     print("Generated icons in", OUT_DIR)
 
