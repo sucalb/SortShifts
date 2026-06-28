@@ -2095,6 +2095,75 @@ body {
   color: var(--text);
 }
 
+.ta-shift-summary {
+  margin-bottom: 1.25rem;
+  padding: 1.25rem;
+  border: 2px solid var(--black);
+  background: var(--surface);
+  box-shadow: var(--shadow-hard-sm);
+}
+
+.ta-shift-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.ta-shift-summary-header h3 {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.ta-shift-summary-desc {
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.ta-summary-table .count-cell {
+  position: relative;
+  min-width: 110px;
+}
+
+.ta-summary-count {
+  position: relative;
+  z-index: 1;
+  font-size: 1rem;
+}
+
+.ta-summary-bar {
+  display: block;
+  position: absolute;
+  left: 0.35rem;
+  right: 0.35rem;
+  bottom: 0.35rem;
+  height: 6px;
+  background: var(--accent-soft);
+  border: 1px solid var(--black);
+  max-width: calc(100% - 0.7rem);
+}
+
+.ta-summary-reg {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.ta-summary-row--none {
+  background: var(--surface-2);
+}
+
+.ta-summary-row--none .ta-summary-count {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.ta-summary-row--max {
+  background: var(--accent-green);
+}
+
 /* ── Scrollbars (neo-brutalist) ── */
 html {
   scrollbar-gutter: stable;

@@ -26,6 +26,7 @@ import type { RegistrationGrid } from '../utils/registrationUtils';
 import type { SlotOverrides } from '../utils/slotAccess';
 import { SheetsSyncPanel } from './SheetsSyncPanel';
 import { TaPicker } from './TaPicker';
+import { TaShiftSummary } from './TaShiftSummary';
 
 interface Props {
   shifts: Shift[];
@@ -308,6 +309,13 @@ export function ScheduleResultView({
               <span className="stat-label">Còn thiếu</span>
             </div>
           </div>
+
+          <TaShiftSummary
+            assignments={result.assignments}
+            roster={roster}
+            registrationGrid={registrationGrid}
+            slotOverrides={slotOverrides}
+          />
 
           {result.unfulfilled.length > 0 && (
             <div className="alert alert-warning">
