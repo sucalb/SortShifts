@@ -1,12 +1,14 @@
-import { useState, useCallback, type ReactNode } from 'react';
+import { useState, useCallback, useMemo, type ReactNode } from 'react';
 import type { DayOfWeek, Shift, TeacherFixedTaMap } from './types';
 import { INITIAL_SHIFTS } from './data/initialShifts';
 import { DEFAULT_TEACHING_ASSISTANTS } from './data/teachingAssistants';
 import type { TeachingAssistant } from './data/teachingAssistants';
 import { useLocalStorage } from './hooks/useLocalStorage';
+import { useUserConfigSync } from './hooks/useUserConfigSync';
 import { ScheduleConfig } from './components/ScheduleConfig';
 import { RegistrationBoard } from './components/RegistrationBoard';
 import { ScheduleResultView } from './components/ScheduleResult';
+import { UserAuthPanel } from './components/UserAuthPanel';
 import { autoPushIfEnabled } from './components/SheetsSyncPanel';
 import { autoSchedule, recomputeScheduleResult } from './utils/scheduler';
 import type { ScheduleResult } from './utils/scheduler';
@@ -91,11 +93,48 @@ export function AdminApp() {
     'lich-class-colors',
     {},
   );
-  const [fixedTaMap] = useLocalStorage<TeacherFixedTaMap>(
+  const [fixedTaMap, setFixedTaMap] = useLocalStorage<TeacherFixedTaMap>(
     'lich-teacher-fixed-ta',
     {},
   );
   const [scheduleResult, setScheduleResult] = useState<ScheduleResult | null>(null);
+
+  const configState = useMemo(
+    () => ({
+      weekStart,
+      shifts,
+      roster,
+      registrationGrid,
+      slotOverrides,
+      classColors,
+      fixedTaMap,
+    }),
+    [weekStart, shifts, roster, registrationGrid, slotOverrides, classColors, fixedTaMap],
+  );
+
+  const configSetters = useMemo(
+    () => ({
+      setWeekStart,
+      setShifts,
+      setRoster,
+      setRegistrationGrid,
+      setSlotOverrides,
+      setClassColors,
+      setFixedTaMap,
+    }),
+    [
+      setWeekStart,
+      setShifts,
+      setRoster,
+      setRegistrationGrid,
+      setSlotOverrides,
+      setClassColors,
+      setFixedTaMap,
+    ],
+  );
+
+  const { session, syncStatus, syncError, lastSavedAt, handleLogin, handleLogout } =
+    useUserConfigSync(configState, configSetters);
 
   const handleUpdateStaffNeeded = useCallback((shiftId: string, count: number) => {
     setShifts((prev) =>
@@ -228,6 +267,14 @@ export function AdminApp() {
           </div>
         </div>
         <div className="topbar-actions">
+          <UserAuthPanel
+            username={session?.username ?? null}
+            syncStatus={syncStatus}
+            syncError={syncError}
+            lastSavedAt={lastSavedAt}
+            onLogin={handleLogin}
+            onLogout={handleLogout}
+          />
           <span className="topbar-week">
             Tuần <strong>{weekStart}</strong>
           </span>
@@ -256,8 +303,12 @@ export function AdminApp() {
           </nav>
 
           <div className="sidebar-promo">
-            <span className="sidebar-promo-tag">Lưu tự động</span>
-            <p>Dữ liệu được giữ trên trình duyệt — không cần đăng nhập.</p>
+            <span className="sidebar-promo-tag">{session ? 'Đồng bộ tài khoản' : 'Lưu tự động'}</span>
+            <p>
+              {session
+                ? `Cấu hình của ${session.username} được lưu trên server và tự động đồng bộ.`
+                : 'Dữ liệu được giữ trên trình duyệt. Đăng nhập để lưu cấu hình theo tài khoản.'}
+            </p>
           </div>
         </aside>
 

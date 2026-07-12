@@ -124,6 +124,94 @@ body {
   font-weight: 700;
 }
 
+.user-auth {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.user-auth--logged-in {
+  gap: 0.65rem;
+}
+
+.user-auth-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  max-width: 220px;
+}
+
+.user-auth-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.user-auth-status {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.user-auth-status--saving,
+.user-auth-status--loading {
+  color: var(--accent-teal);
+}
+
+.user-auth-status--saved {
+  color: var(--accent-teal);
+}
+
+.user-auth-status--error {
+  color: #c0392b;
+}
+
+.user-auth-error {
+  font-size: 0.72rem;
+  color: #c0392b;
+}
+
+.user-auth-form {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 300;
+  width: min(280px, calc(100vw - 2rem));
+  padding: 0.85rem;
+  background: var(--surface);
+  border: 2px solid var(--black);
+  box-shadow: var(--shadow-hard);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.user-auth-form-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.user-auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+}
+
+.user-auth-field input {
+  padding: 0.4rem 0.55rem;
+  border: 2px solid var(--black);
+  background: var(--surface);
+  font: inherit;
+}
+
+.user-auth-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
 .app-body {
   display: flex;
   flex: 1;

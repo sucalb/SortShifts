@@ -51,3 +51,16 @@ export interface ShareInfo {
   adminToken: string;
   guestUrl: string;
 }
+
+export interface UserConfigSnapshot {
+  weekStart: string;
+  shifts: Shift[];
+  roster: import('./data/teachingAssistants').TeachingAssistant[];
+  registrationGrid: import('./utils/registrationUtils').RegistrationGrid;
+  slotOverrides?: import('./utils/slotAccess').SlotOverrides;
+  classColors: Record<string, string>;
+  fixedTaMap: TeacherFixedTaMap;
+  sheetsWebhook?: string;
+  sheetsAutoPush?: boolean;
+  updatedAt?: string;
+}

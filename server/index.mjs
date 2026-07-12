@@ -4,10 +4,15 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
+import { verifyCredentials, isValidUsername } from './users.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, 'data');
+const USERS_DIR = path.join(DATA_DIR, 'users');
 const PORT = process.env.PORT || 3001;
+
+/** @type {Map<string, { username: string; createdAt: string }>} */
+const sessions = new Map();
 
 const app = express();
 app.use(cors());
@@ -15,6 +20,44 @@ app.use(express.json({ limit: '2mb' }));
 
 async function ensureDataDir() {
   await fs.mkdir(DATA_DIR, { recursive: true });
+  await fs.mkdir(USERS_DIR, { recursive: true });
+}
+
+function userConfigPath(username) {
+  return path.join(USERS_DIR, `${username}.json`);
+}
+
+async function readUserConfig(username) {
+  try {
+    const raw = await fs.readFile(userConfigPath(username), 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+async function writeUserConfig(username, config) {
+  await ensureDataDir();
+  const payload = {
+    ...config,
+    updatedAt: new Date().toISOString(),
+  };
+  await fs.writeFile(userConfigPath(username), JSON.stringify(payload, null, 2));
+}
+
+function getSession(req) {
+  const token = req.headers['x-auth-token'];
+  if (!token || typeof token !== 'string') return null;
+  return sessions.get(token) ?? null;
+}
+
+function requireAuth(req, res, next) {
+  const session = getSession(req);
+  if (!session) {
+    return res.status(401).json({ error: 'Chưa đăng nhập hoặc phiên đã hết hạn' });
+  }
+  req.user = session;
+  next();
 }
 
 function dataPath(shareId: string) {
@@ -40,6 +83,73 @@ function publicPayload(record: Record<string, unknown>) {
   const { adminToken: _, ...rest } = record;
   return rest;
 }
+
+app.post('/api/auth/login', async (req, res) => {
+  const username = String(req.body.username ?? '').trim();
+  const password = String(req.body.password ?? '');
+
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Vui lòng nhập tên đăng nhập và mật khẩu' });
+  }
+  if (!isValidUsername(username)) {
+    return res.status(400).json({ error: 'Tên đăng nhập không hợp lệ' });
+  }
+  if (!verifyCredentials(username, password)) {
+    return res.status(401).json({ error: 'Sai tên đăng nhập hoặc mật khẩu' });
+  }
+
+  const token = randomUUID();
+  sessions.set(token, { username, createdAt: new Date().toISOString() });
+  res.json({ token, username });
+});
+
+app.post('/api/auth/logout', requireAuth, (req, res) => {
+  const token = req.headers['x-auth-token'];
+  if (typeof token === 'string') sessions.delete(token);
+  res.json({ ok: true });
+});
+
+app.get('/api/auth/me', requireAuth, (req, res) => {
+  res.json({ username: req.user.username });
+});
+
+app.get('/api/user/config', requireAuth, async (req, res) => {
+  const config = await readUserConfig(req.user.username);
+  res.json({ config });
+});
+
+app.put('/api/user/config', requireAuth, async (req, res) => {
+  const {
+    weekStart,
+    shifts,
+    roster,
+    registrationGrid,
+    slotOverrides,
+    classColors,
+    fixedTaMap,
+    sheetsWebhook,
+    sheetsAutoPush,
+  } = req.body ?? {};
+
+  if (!weekStart || !Array.isArray(shifts) || !Array.isArray(roster) || !registrationGrid) {
+    return res.status(400).json({ error: 'Dữ liệu cấu hình không hợp lệ' });
+  }
+
+  await writeUserConfig(req.user.username, {
+    weekStart,
+    shifts,
+    roster,
+    registrationGrid,
+    slotOverrides,
+    classColors: classColors ?? {},
+    fixedTaMap: fixedTaMap ?? {},
+    sheetsWebhook: sheetsWebhook ?? '',
+    sheetsAutoPush: Boolean(sheetsAutoPush),
+  });
+
+  const config = await readUserConfig(req.user.username);
+  res.json({ config });
+});
 
 app.post('/api/share', async (req, res) => {
   const shareId = randomUUID().slice(0, 8);
