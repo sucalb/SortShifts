@@ -104,16 +104,24 @@ export function useUserConfigSync(state: ConfigState, setters: ConfigSetters) {
       setSyncStatus('loading');
       setSyncError(null);
       try {
-        await fetchCurrentUser(nextSession.token);
-        const config = await fetchUserConfig(nextSession.token);
+        await fetchCurrentUser(nextSession.token, nextSession.mode);
+        const config = await fetchUserConfig(
+          nextSession.token,
+          nextSession.mode,
+          nextSession.username,
+        );
         if (config) {
           skipNextSave.current = true;
           applySnapshot(config, setters);
           setLastSavedAt(config.updatedAt ?? null);
+        } else if (nextSession.mode === 'browser') {
+          // Lần đầu trên Vercel: giữ config đang có trên trình duyệt
+          setLastSavedAt(new Date().toISOString());
         }
         setSession(nextSession);
         setSyncStatus('saved');
       } catch (err) {
+        // Phiên server cũ trên Vercel → chuyển sang bỏ phiên, không crash UI
         clearSession();
         setSession(null);
         setSyncStatus('error');
@@ -148,7 +156,7 @@ export function useUserConfigSync(state: ConfigState, setters: ConfigSetters) {
 
   const handleLogout = useCallback(async () => {
     if (session?.token) {
-      await apiLogout(session.token);
+      await apiLogout(session.token, session.mode);
     } else {
       clearSession();
     }
@@ -173,7 +181,7 @@ export function useUserConfigSync(state: ConfigState, setters: ConfigSetters) {
       setSyncError(null);
       try {
         const snapshot = buildSnapshot(stateRef.current);
-        await saveUserConfig(session.token, snapshot);
+        await saveUserConfig(session.token, snapshot, session.mode, session.username);
         setLastSavedAt(new Date().toISOString());
         setSyncStatus('saved');
       } catch (err) {

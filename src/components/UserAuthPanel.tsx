@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from 'react';
+import type { AuthMode } from '../api/userConfigApi';
 import type { SyncStatus } from '../hooks/useUserConfigSync';
 
 interface UserAuthPanelProps {
   username: string | null;
+  authMode?: AuthMode | null;
   syncStatus: SyncStatus;
   syncError: string | null;
   lastSavedAt: string | null;
@@ -24,14 +26,14 @@ function formatSavedAt(iso: string | null) {
   }
 }
 
-function statusLabel(status: SyncStatus) {
+function statusLabel(status: SyncStatus, mode?: AuthMode | null) {
   switch (status) {
     case 'loading':
       return 'Đang tải…';
     case 'saving':
       return 'Đang lưu…';
     case 'saved':
-      return 'Đã lưu';
+      return mode === 'browser' ? 'Đã lưu (trình duyệt)' : 'Đã lưu';
     case 'error':
       return 'Lỗi đồng bộ';
     default:
@@ -41,6 +43,7 @@ function statusLabel(status: SyncStatus) {
 
 export function UserAuthPanel({
   username,
+  authMode,
   syncStatus,
   syncError,
   lastSavedAt,
@@ -70,7 +73,7 @@ export function UserAuthPanel({
 
   if (username) {
     const savedLabel = formatSavedAt(lastSavedAt);
-    const status = statusLabel(syncStatus);
+    const status = statusLabel(syncStatus, authMode);
 
     return (
       <div className="user-auth user-auth--logged-in">
@@ -106,7 +109,8 @@ export function UserAuthPanel({
         <form className="user-auth-form" onSubmit={(e) => void handleSubmit(e)}>
           <p className="user-auth-form-title">Tài khoản local</p>
           <p className="user-auth-form-hint">
-            Đăng nhập để lưu cấu hình ca, đăng ký lịch và kết quả xếp gần nhất.
+            Đăng nhập để lưu cấu hình ca, đăng ký lịch và kết quả xếp gần nhất. Trên Vercel
+            dữ liệu được lưu trong trình duyệt của bạn.
           </p>
           <label className="user-auth-field">
             <span>Tên đăng nhập</span>

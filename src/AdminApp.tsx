@@ -380,6 +380,7 @@ export function AdminApp() {
         <div className="topbar-actions">
           <UserAuthPanel
             username={session?.username ?? null}
+            authMode={session?.mode ?? null}
             syncStatus={syncStatus}
             syncError={syncError}
             lastSavedAt={lastSavedAt}
@@ -414,10 +415,18 @@ export function AdminApp() {
           </nav>
 
           <div className="sidebar-promo">
-            <span className="sidebar-promo-tag">{session ? 'Đồng bộ tài khoản' : 'Lưu tự động'}</span>
+            <span className="sidebar-promo-tag">
+              {session
+                ? session.mode === 'browser'
+                  ? 'Lưu trình duyệt'
+                  : 'Đồng bộ tài khoản'
+                : 'Lưu tự động'}
+            </span>
             <p>
               {session
-                ? `Cấu hình & lịch xếp gần nhất của ${session.username} được lưu trên server.`
+                ? session.mode === 'browser'
+                  ? `Cấu hình của ${session.username} được lưu trên trình duyệt này (phù hợp Vercel).`
+                  : `Cấu hình & lịch xếp gần nhất của ${session.username} được lưu trên server.`
                 : 'Dữ liệu được giữ trên trình duyệt. Đăng nhập hoangbui24 để lưu cấu hình theo tài khoản.'}
             </p>
           </div>
