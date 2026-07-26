@@ -9,13 +9,20 @@ export interface AuthSession {
 }
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    ...options,
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json', ...options?.headers },
+      ...options,
+    });
+  } catch {
+    throw new Error(
+      'Không kết nối được server. Chạy npm run dev:all (cần cả API ở cổng 3001).',
+    );
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || 'Lỗi kết nối server');
+    throw new Error(err.error || `Lỗi server (${res.status})`);
   }
   return res.json() as Promise<T>;
 }

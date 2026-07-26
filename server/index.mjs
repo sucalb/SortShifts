@@ -60,11 +60,11 @@ function requireAuth(req, res, next) {
   next();
 }
 
-function dataPath(shareId: string) {
+function dataPath(shareId) {
   return path.join(DATA_DIR, `${shareId}.json`);
 }
 
-async function readShare(shareId: string) {
+async function readShare(shareId) {
   try {
     const raw = await fs.readFile(dataPath(shareId), 'utf-8');
     return JSON.parse(raw);
@@ -73,13 +73,13 @@ async function readShare(shareId: string) {
   }
 }
 
-async function writeShare(shareId: string, data: object) {
+async function writeShare(shareId, data) {
   await ensureDataDir();
   data.updatedAt = new Date().toISOString();
   await fs.writeFile(dataPath(shareId), JSON.stringify(data, null, 2));
 }
 
-function publicPayload(record: Record<string, unknown>) {
+function publicPayload(record) {
   const { adminToken: _, ...rest } = record;
   return rest;
 }
@@ -127,6 +127,9 @@ app.put('/api/user/config', requireAuth, async (req, res) => {
     slotOverrides,
     classColors,
     fixedTaMap,
+    registrationSlots,
+    scheduleSlots,
+    scheduleResult,
     sheetsWebhook,
     sheetsAutoPush,
   } = req.body ?? {};
@@ -143,6 +146,9 @@ app.put('/api/user/config', requireAuth, async (req, res) => {
     slotOverrides,
     classColors: classColors ?? {},
     fixedTaMap: fixedTaMap ?? {},
+    registrationSlots,
+    scheduleSlots,
+    scheduleResult: scheduleResult ?? null,
     sheetsWebhook: sheetsWebhook ?? '',
     sheetsAutoPush: Boolean(sheetsAutoPush),
   });
@@ -206,7 +212,7 @@ app.post('/api/share/:shareId/register', async (req, res) => {
   }
 
   const existing = record.staff.find(
-    (s: { name: string }) => s.name.trim().toLowerCase() === fullName.trim().toLowerCase(),
+    (s) => s.name.trim().toLowerCase() === fullName.trim().toLowerCase(),
   );
   if (existing) {
     return res.json({ staff: existing });
@@ -235,7 +241,7 @@ app.patch('/api/share/:shareId/staff/:staffId', async (req, res) => {
   const record = await readShare(req.params.shareId);
   if (!record) return res.status(404).json({ error: 'Không tìm thấy lịch chia sẻ' });
 
-  const idx = record.staff.findIndex((s: { id: string }) => s.id === req.params.staffId);
+  const idx = record.staff.findIndex((s) => s.id === req.params.staffId);
   if (idx === -1) return res.status(404).json({ error: 'Không tìm thấy trợ giảng' });
 
   if (req.body.availability) {
