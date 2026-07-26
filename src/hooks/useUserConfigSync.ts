@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { Shift, TeacherFixedTaMap, UserConfigSnapshot } from '../types';
+import type { Shift, TeacherFixedTaMap, TimeSlot, UserConfigSnapshot } from '../types';
 import type { TeachingAssistant } from '../data/teachingAssistants';
 import type { SlotOverrides } from '../utils/slotAccess';
 import type { RegistrationGrid } from '../utils/registrationUtils';
 import type { ScheduleResult } from '../utils/scheduler';
+import {
+  normalizeSlotCatalog,
+  type ScheduleSlotsMap,
+} from '../utils/slotCatalog';
 import {
   clearSession,
   fetchCurrentUser,
@@ -25,6 +29,8 @@ export interface ConfigState {
   slotOverrides?: SlotOverrides;
   classColors: Record<string, string>;
   fixedTaMap: TeacherFixedTaMap;
+  registrationSlots: TimeSlot[];
+  scheduleSlots: ScheduleSlotsMap;
   scheduleResult: ScheduleResult | null;
 }
 
@@ -36,6 +42,8 @@ export interface ConfigSetters {
   setSlotOverrides: (value: SlotOverrides | undefined) => void;
   setClassColors: (value: Record<string, string>) => void;
   setFixedTaMap: (value: TeacherFixedTaMap) => void;
+  setRegistrationSlots: (value: TimeSlot[] | ((prev: TimeSlot[]) => TimeSlot[])) => void;
+  setScheduleSlots: (value: ScheduleSlotsMap | ((prev: ScheduleSlotsMap) => ScheduleSlotsMap)) => void;
   setScheduleResult: (value: ScheduleResult | null | ((prev: ScheduleResult | null) => ScheduleResult | null)) => void;
 }
 
@@ -66,6 +74,7 @@ function buildSnapshot(state: ConfigState): UserConfigSnapshot {
 }
 
 function applySnapshot(config: UserConfigSnapshot, setters: ConfigSetters) {
+  const catalogs = normalizeSlotCatalog(config.registrationSlots, config.scheduleSlots);
   setters.setWeekStart(config.weekStart);
   setters.setShifts(config.shifts);
   setters.setRoster(config.roster);
@@ -73,6 +82,8 @@ function applySnapshot(config: UserConfigSnapshot, setters: ConfigSetters) {
   setters.setSlotOverrides(config.slotOverrides);
   setters.setClassColors(config.classColors ?? {});
   setters.setFixedTaMap(config.fixedTaMap ?? {});
+  setters.setRegistrationSlots(catalogs.registrationSlots);
+  setters.setScheduleSlots(catalogs.scheduleSlots);
   setters.setScheduleResult(config.scheduleResult ?? null);
   applySheetsSettings(config.sheetsWebhook ?? '', Boolean(config.sheetsAutoPush));
 }

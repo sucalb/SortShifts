@@ -1,17 +1,16 @@
-import { REGISTRATION_SLOTS, SCHEDULE_SLOTS } from '../data/constants';
 import type { Shift, StaffMember, TimeSlot } from '../types';
 import { isSlotRegistrable, type SlotOverrides } from './slotAccess';
+import {
+  findTimeSlotById,
+  getActiveRegistrationSlots,
+} from './slotCatalog';
 
 export function timeOverlaps(a: TimeSlot, b: TimeSlot): boolean {
   return a.start < b.end && b.start < a.end;
 }
 
 export function getTimeSlotById(slotId: string): TimeSlot | undefined {
-  for (const slots of Object.values(SCHEDULE_SLOTS)) {
-    const found = slots.find((s) => s.id === slotId);
-    if (found) return found;
-  }
-  return REGISTRATION_SLOTS.find((s) => s.id === slotId);
+  return findTimeSlotById(slotId);
 }
 
 export function getShiftTimeSlot(shift: Shift): TimeSlot | undefined {
@@ -37,7 +36,7 @@ export function isStaffAvailableForShift(
   const dayAvail = staff.availability[shift.day];
   if (!dayAvail) return false;
 
-  return REGISTRATION_SLOTS.some(
+  return getActiveRegistrationSlots().some(
     (regSlot) =>
       isSlotRegistrable(slotOverrides, shift.day, regSlot.id) &&
       dayAvail[regSlot.id] &&

@@ -2,11 +2,11 @@ import type { Assignment, DayOfWeek, Facility, Level, Shift } from '../types';
 import {
   FACILITY_LABELS,
   LEVEL_LABELS,
-  SCHEDULE_SLOTS,
   getScheduleKey,
   getWeekDates,
 } from '../data/constants';
 import type { ScheduleResult } from './scheduler';
+import { getScheduleSlotsForKey } from './slotCatalog';
 
 const DAY_LABELS_UPPER: Record<DayOfWeek, string> = {
   0: 'THỨ HAI',
@@ -109,7 +109,7 @@ function renderLevelTable(
   weekDates: string[],
 ): string {
   const key = getScheduleKey(facility, level);
-  const slots = SCHEDULE_SLOTS[key] ?? [];
+  const slots = getScheduleSlotsForKey(key);
   const levelShifts = shifts.filter((s) => s.facility === facility && s.level === level);
   if (levelShifts.length === 0) return '';
 
@@ -264,7 +264,7 @@ export function exportScheduleText(
 
     for (const level of LEVEL_ORDER) {
       const key = getScheduleKey(facility, level);
-      const slots = SCHEDULE_SLOTS[key] ?? [];
+      const slots = getScheduleSlotsForKey(key);
       const levelShifts = facilityShifts.filter((s) => s.level === level);
       if (levelShifts.length === 0) continue;
 

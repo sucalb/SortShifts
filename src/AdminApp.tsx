@@ -1,5 +1,5 @@
-import { useState, useCallback, useMemo, type ReactNode } from 'react';
-import type { DayOfWeek, Shift, TeacherFixedTaMap } from './types';
+import { useState, useCallback, useEffect, useMemo, type ReactNode } from 'react';
+import type { DayOfWeek, Shift, TeacherFixedTaMap, TimeSlot } from './types';
 import { INITIAL_SHIFTS } from './data/initialShifts';
 import { DEFAULT_TEACHING_ASSISTANTS } from './data/teachingAssistants';
 import type { TeachingAssistant } from './data/teachingAssistants';
@@ -14,10 +14,17 @@ import { autoSchedule, recomputeScheduleResult } from './utils/scheduler';
 import type { ScheduleResult } from './utils/scheduler';
 import { toggleSlotAccess, type SlotOverrides } from './utils/slotAccess';
 import {
-  createEmptyRegistrationGrid,
+  ensureRegistrationGridSlots,
   parseRegisteredNames,
+  removeRegistrationSlotFromGrid,
   type RegistrationGrid,
 } from './utils/registrationUtils';
+import {
+  getDefaultRegistrationSlots,
+  getDefaultScheduleSlots,
+  setActiveSlotCatalogs,
+  type ScheduleSlotsMap,
+} from './utils/slotCatalog';
 import './App.css';
 
 type Tab = 'config' | 'register' | 'result';
@@ -61,11 +68,11 @@ const NAV: { id: Tab; label: string; desc: string; icon: ReactNode }[] = [
 const PAGE_META: Record<Tab, { title: string; subtitle: string }> = {
   config: {
     title: 'Cấu hình ca học',
-    subtitle: 'Thiết lập lớp, giáo viên và số trợ giảng cho từng ca trong tuần.',
+    subtitle: 'Thiết lập lớp, khung giờ, giáo viên và số trợ giảng cho từng ca trong tuần.',
   },
   register: {
     title: 'Đăng ký lịch rảnh',
-    subtitle: 'Trợ giảng đánh dấu các ca có thể làm việc trước khi xếp lịch.',
+    subtitle: 'Trợ giảng đánh dấu các ca có thể làm việc — có thể chỉnh/thêm khung giờ.',
   },
   result: {
     title: 'Kết quả xếp lịch',
@@ -87,7 +94,7 @@ export function AdminApp() {
   );
   const [registrationGrid, setRegistrationGrid] = useLocalStorage<RegistrationGrid>(
     'lich-registration-grid',
-    createEmptyRegistrationGrid(),
+    ensureRegistrationGridSlots({}, getDefaultRegistrationSlots()),
   );
   const [classColors, setClassColors] = useLocalStorage<Record<string, string>>(
     'lich-class-colors',
@@ -97,10 +104,22 @@ export function AdminApp() {
     'lich-teacher-fixed-ta',
     {},
   );
+  const [registrationSlots, setRegistrationSlots] = useLocalStorage<TimeSlot[]>(
+    'lich-registration-slots',
+    getDefaultRegistrationSlots(),
+  );
+  const [scheduleSlots, setScheduleSlots] = useLocalStorage<ScheduleSlotsMap>(
+    'lich-schedule-slots',
+    getDefaultScheduleSlots(),
+  );
   const [scheduleResult, setScheduleResult] = useLocalStorage<ScheduleResult | null>(
     'lich-schedule-result',
     null,
   );
+
+  useEffect(() => {
+    setActiveSlotCatalogs(registrationSlots, scheduleSlots);
+  }, [registrationSlots, scheduleSlots]);
 
   const configState = useMemo(
     () => ({
@@ -111,9 +130,22 @@ export function AdminApp() {
       slotOverrides,
       classColors,
       fixedTaMap,
+      registrationSlots,
+      scheduleSlots,
       scheduleResult,
     }),
-    [weekStart, shifts, roster, registrationGrid, slotOverrides, classColors, fixedTaMap, scheduleResult],
+    [
+      weekStart,
+      shifts,
+      roster,
+      registrationGrid,
+      slotOverrides,
+      classColors,
+      fixedTaMap,
+      registrationSlots,
+      scheduleSlots,
+      scheduleResult,
+    ],
   );
 
   const configSetters = useMemo(
@@ -125,6 +157,8 @@ export function AdminApp() {
       setSlotOverrides,
       setClassColors,
       setFixedTaMap,
+      setRegistrationSlots,
+      setScheduleSlots,
       setScheduleResult,
     }),
     [
@@ -135,6 +169,8 @@ export function AdminApp() {
       setSlotOverrides,
       setClassColors,
       setFixedTaMap,
+      setRegistrationSlots,
+      setScheduleSlots,
       setScheduleResult,
     ],
   );
@@ -215,6 +251,65 @@ export function AdminApp() {
       setRegistrationGrid(grid);
     },
     [setRegistrationGrid],
+  );
+
+  const handleUpdateRegistrationSlots = useCallback(
+    (slots: TimeSlot[]) => {
+      setRegistrationSlots(slots);
+      setRegistrationGrid((prev) => ensureRegistrationGridSlots(prev, slots));
+    },
+    [setRegistrationSlots, setRegistrationGrid],
+  );
+
+  const handleRemoveRegistrationSlot = useCallback(
+    (slotId: string) => {
+      setRegistrationSlots((prev) => prev.filter((s) => s.id !== slotId));
+      setRegistrationGrid((prev) => removeRegistrationSlotFromGrid(prev, slotId));
+      setSlotOverrides((prev) => {
+        if (!prev) return prev;
+        const next: SlotOverrides = {};
+        for (const [dayKey, dayMap] of Object.entries(prev)) {
+          if (!dayMap) continue;
+          const day = Number(dayKey) as DayOfWeek;
+          const filtered = Object.fromEntries(
+            Object.entries(dayMap).filter(([id]) => id !== slotId),
+          );
+          if (Object.keys(filtered).length > 0) next[day] = filtered;
+        }
+        return Object.keys(next).length > 0 ? next : undefined;
+      });
+    },
+    [setRegistrationSlots, setRegistrationGrid, setSlotOverrides],
+  );
+
+  const handleUpdateScheduleSlots = useCallback(
+    (key: string, slots: TimeSlot[]) => {
+      setScheduleSlots((prev) => ({ ...prev, [key]: slots }));
+    },
+    [setScheduleSlots],
+  );
+
+  const handleRemoveScheduleSlot = useCallback(
+    (key: string, slotId: string) => {
+      setScheduleSlots((prev) => ({
+        ...prev,
+        [key]: (prev[key] ?? []).filter((s) => s.id !== slotId),
+      }));
+      setShifts((prevShifts) => {
+        const remainingShifts = prevShifts.filter((s) => s.timeSlotId !== slotId);
+        const removedIds = new Set(
+          prevShifts.filter((s) => s.timeSlotId === slotId).map((s) => s.id),
+        );
+        setScheduleResult((prevResult) => {
+          if (!prevResult) return prevResult;
+          const assignments = prevResult.assignments.filter((a) => !removedIds.has(a.shiftId));
+          const { unfulfilled, stats } = recomputeScheduleResult(assignments, remainingShifts);
+          return { assignments, unfulfilled, stats };
+        });
+        return remainingShifts;
+      });
+    },
+    [setScheduleSlots, setShifts, setScheduleResult],
   );
 
   const handleRunSchedule = useCallback(async () => {
@@ -341,12 +436,15 @@ export function AdminApp() {
                 weekStart={weekStart}
                 roster={roster}
                 classColors={classColors}
+                scheduleSlots={scheduleSlots}
                 onClassColorsChange={setClassColors}
                 onUpdateStaffNeeded={handleUpdateStaffNeeded}
                 onUpdateShift={handleUpdateShift}
                 onAddShift={handleAddShift}
                 onRemoveShift={handleRemoveShift}
                 onWeekStartChange={setWeekStart}
+                onUpdateScheduleSlots={handleUpdateScheduleSlots}
+                onRemoveScheduleSlot={handleRemoveScheduleSlot}
               />
             )}
             {tab === 'register' && (
@@ -355,11 +453,14 @@ export function AdminApp() {
                 roster={roster}
                 slotOverrides={slotOverrides}
                 weekStart={weekStart}
+                registrationSlots={registrationSlots}
                 onUpdateCell={handleUpdateCell}
                 onToggleSlotAccess={handleToggleSlotAccess}
                 onUpdateRoster={handleUpdateRoster}
                 onWeekStartChange={setWeekStart}
                 onImportGrid={handleImportGrid}
+                onUpdateRegistrationSlots={handleUpdateRegistrationSlots}
+                onRemoveRegistrationSlot={handleRemoveRegistrationSlot}
               />
             )}
             {tab === 'result' && (
@@ -371,6 +472,7 @@ export function AdminApp() {
                 roster={roster}
                 registrationGrid={registrationGrid}
                 slotOverrides={slotOverrides}
+                scheduleSlots={scheduleSlots}
                 onRunSchedule={handleRunSchedule}
                 onClearAssignments={() => setScheduleResult(null)}
                 onUpdateAssignment={handleUpdateAssignment}

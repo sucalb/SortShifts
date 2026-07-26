@@ -2309,3 +2309,88 @@ html {
 .guest-ta-list::-webkit-scrollbar-thumb {
   background: var(--accent-teal);
 }
+
+.slot-editor {
+  margin: 0.75rem 0 1rem;
+  padding: 0.85rem 1rem;
+  border: 2px solid var(--black);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-hard-sm);
+}
+
+.slot-editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.slot-editor-header strong {
+  display: block;
+  font-size: 0.92rem;
+}
+
+.slot-editor-header p {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.slot-editor-body {
+  margin-top: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.slot-editor-tip {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.slot-editor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.slot-editor-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+  padding: 0.45rem 0.55rem;
+  background: var(--surface);
+  border: 1.5px solid var(--black);
+}
+
+.slot-editor-time {
+  width: 4.6rem;
+  padding: 0.28rem 0.4rem;
+  border: 1.5px solid var(--black);
+  font: inherit;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.slot-editor-sep {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.slot-editor-label {
+  min-width: 7rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.slot-editor-remove {
+  margin-left: auto;
+}
+
+.slot-editor-error {
+  flex-basis: 100%;
+  font-size: 0.75rem;
+  color: #b42318;
+}

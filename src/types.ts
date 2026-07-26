@@ -60,6 +60,8 @@ export interface UserConfigSnapshot {
   slotOverrides?: import('./utils/slotAccess').SlotOverrides;
   classColors: Record<string, string>;
   fixedTaMap: TeacherFixedTaMap;
+  registrationSlots?: TimeSlot[];
+  scheduleSlots?: Record<string, TimeSlot[]>;
   scheduleResult?: import('./utils/scheduler').ScheduleResult | null;
   sheetsWebhook?: string;
   sheetsAutoPush?: boolean;

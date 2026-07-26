@@ -5,12 +5,15 @@ import {
   DAY_LABELS,
   FACILITY_LABELS,
   LEVEL_LABELS,
-  SCHEDULE_SLOTS,
   getScheduleKey,
   getWeekDates,
 } from '../data/constants';
 import { getShiftTimeSlot } from '../utils/timeUtils';
 import type { ScheduleResult } from '../utils/scheduler';
+import {
+  getScheduleSlotsForKey,
+  type ScheduleSlotsMap,
+} from '../utils/slotCatalog';
 import {
   downloadFile,
   exportScheduleHtml,
@@ -36,6 +39,7 @@ interface Props {
   roster: TeachingAssistant[];
   registrationGrid: RegistrationGrid;
   slotOverrides: SlotOverrides | undefined;
+  scheduleSlots: ScheduleSlotsMap;
   onRunSchedule: () => void;
   onClearAssignments: () => void;
   onUpdateAssignment: (shiftId: string, staffIds: string[]) => void;
@@ -150,6 +154,7 @@ function AssignmentView({
   roster,
   registrationGrid,
   slotOverrides,
+  scheduleSlots,
   onUpdateAssignment,
 }: {
   facility: 'coso1' | 'coso2';
@@ -161,10 +166,11 @@ function AssignmentView({
   roster: TeachingAssistant[];
   registrationGrid: RegistrationGrid;
   slotOverrides: SlotOverrides | undefined;
+  scheduleSlots: ScheduleSlotsMap;
   onUpdateAssignment: (shiftId: string, staffIds: string[]) => void;
 }) {
   const key = getScheduleKey(facility, level);
-  const slots = SCHEDULE_SLOTS[key] ?? [];
+  const slots = getScheduleSlotsForKey(key, scheduleSlots);
   const days = [0, 1, 2, 3, 4, 5, 6] as const;
 
   const levelShifts = shifts.filter((s) => s.facility === facility && s.level === level);
@@ -235,6 +241,7 @@ export function ScheduleResultView({
   roster,
   registrationGrid,
   slotOverrides,
+  scheduleSlots,
   onRunSchedule,
   onClearAssignments,
   onUpdateAssignment,
@@ -379,6 +386,7 @@ export function ScheduleResultView({
                   roster={roster}
                   registrationGrid={registrationGrid}
                   slotOverrides={slotOverrides}
+                  scheduleSlots={scheduleSlots}
                   onUpdateAssignment={onUpdateAssignment}
                 />
               ))}

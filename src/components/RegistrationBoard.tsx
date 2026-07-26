@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import type { DayOfWeek } from '../types';
+import type { DayOfWeek, TimeSlot } from '../types';
 import type { TeachingAssistant } from '../data/teachingAssistants';
 import {
   DAY_LABELS,
-  REGISTRATION_SLOTS,
   getWeekDates,
 } from '../data/constants';
 import {
@@ -18,17 +17,21 @@ import {
 } from '../utils/registrationUtils';
 import { parseRosterText, rosterToText } from '../utils/staffUtils';
 import { parseRegistrationImport } from '../utils/importRegistration';
+import { TimeSlotsEditor } from './TimeSlotsEditor';
 
 interface Props {
   registrationGrid: RegistrationGrid;
   roster: TeachingAssistant[];
   slotOverrides: SlotOverrides | undefined;
   weekStart: string;
+  registrationSlots: TimeSlot[];
   onUpdateCell: (day: DayOfWeek, slotId: string, text: string) => void;
   onToggleSlotAccess: (day: DayOfWeek, slotId: string) => void;
   onUpdateRoster: (roster: TeachingAssistant[]) => void;
   onWeekStartChange: (date: string) => void;
   onImportGrid: (grid: RegistrationGrid) => void;
+  onUpdateRegistrationSlots: (slots: TimeSlot[]) => void;
+  onRemoveRegistrationSlot: (slotId: string) => void;
 }
 
 export function RegistrationBoard({
@@ -36,11 +39,14 @@ export function RegistrationBoard({
   roster,
   slotOverrides,
   weekStart,
+  registrationSlots,
   onUpdateCell,
   onToggleSlotAccess,
   onUpdateRoster,
   onWeekStartChange,
   onImportGrid,
+  onUpdateRegistrationSlots,
+  onRemoveRegistrationSlot,
 }: Props) {
   const weekDates = getWeekDates(weekStart);
   const days: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
@@ -57,7 +63,7 @@ export function RegistrationBoard({
   };
 
   const handleImport = () => {
-    const result = parseRegistrationImport(importText);
+    const result = parseRegistrationImport(importText, registrationSlots);
     if ('error' in result) {
       setImportMsg({ type: 'err', text: result.error });
       return;
@@ -148,7 +154,10 @@ export function RegistrationBoard({
           </div>
 
           <ol className="import-steps">
-            <li>Mở sheet đăng ký, chọn vùng <strong>7 cột ngày × 7 dòng ca</strong></li>
+            <li>
+              Mở sheet đăng ký, chọn vùng{' '}
+              <strong>7 cột ngày × {registrationSlots.length} dòng ca</strong>
+            </li>
             <li>Nhấn <kbd>Ctrl</kbd>+<kbd>C</kbd> để copy</li>
             <li>Dán vào khung dưới rồi bấm Import</li>
           </ol>
@@ -207,6 +216,17 @@ export function RegistrationBoard({
         <p className="edit-mode-hint">Chế độ chỉnh ô: click ô để mở/khóa ca đăng ký</p>
       )}
 
+      <TimeSlotsEditor
+        title="Khung giờ đăng ký"
+        hint="Thêm/sửa ca đăng ký (vd. 21:00–23:00) để khớp Sheet."
+        slots={registrationSlots}
+        idPrefix="reg"
+        onChange={onUpdateRegistrationSlots}
+        onRemoveSlot={(slotId) => {
+          onRemoveRegistrationSlot(slotId);
+        }}
+      />
+
       <div className="table-wrapper registration-board">
         <table className="schedule-table registration-table reg-names-table">
           <thead>
@@ -221,7 +241,7 @@ export function RegistrationBoard({
             </tr>
           </thead>
           <tbody>
-            {REGISTRATION_SLOTS.map((slot) => (
+            {registrationSlots.map((slot) => (
               <tr key={slot.id}>
                 <td className="time-col">{slot.label}</td>
                 {days.map((day) => {

@@ -1,6 +1,6 @@
 import type { DayOfWeek, StaffMember } from '../types';
 import type { TeachingAssistant } from '../data/teachingAssistants';
-import { REGISTRATION_SLOTS } from '../data/constants';
+import { getActiveRegistrationSlots } from './slotCatalog';
 import { isSlotRegistrable, type SlotOverrides } from './slotAccess';
 
 export function createEmptyAvailability(): Record<DayOfWeek, Record<string, boolean>> {
@@ -57,7 +57,7 @@ export function countRegisteredShifts(
   let count = 0;
   const days: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
   for (const day of days) {
-    for (const slot of REGISTRATION_SLOTS) {
+    for (const slot of getActiveRegistrationSlots()) {
       if (!isSlotRegistrable(slotOverrides, day, slot.id)) continue;
       if (member.availability[day]?.[slot.id]) count++;
     }

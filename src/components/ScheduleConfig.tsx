@@ -1,17 +1,19 @@
 import { useState } from 'react';
-import type { DayOfWeek, Facility, Level, Shift } from '../types';
+import type { DayOfWeek, Facility, Level, Shift, TimeSlot } from '../types';
 import {
   DAY_LABELS,
   FACILITY_LABELS,
   LEVEL_LABELS,
-  SCHEDULE_SLOTS,
   getScheduleKey,
   getWeekDates,
 } from '../data/constants';
 import { resolveClassColor } from '../utils/classColors';
 import { syncClassColorsFromSheet } from '../utils/sheetAutoFill';
 import type { TeachingAssistant } from '../data/teachingAssistants';
+import type { ScheduleSlotsMap } from '../utils/slotCatalog';
+import { getScheduleSlotsForKey } from '../utils/slotCatalog';
 import { TaPicker } from './TaPicker';
+import { TimeSlotsEditor } from './TimeSlotsEditor';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 
 interface Props {
@@ -19,6 +21,7 @@ interface Props {
   weekStart: string;
   roster: TeachingAssistant[];
   classColors: Record<string, string>;
+  scheduleSlots: ScheduleSlotsMap;
   onClassColorsChange: (colors: Record<string, string>) => void;
   onUpdateStaffNeeded: (shiftId: string, count: number) => void;
   onUpdateShift: (
@@ -28,6 +31,8 @@ interface Props {
   onAddShift: (shift: Omit<Shift, 'id'>) => void;
   onRemoveShift: (shiftId: string) => void;
   onWeekStartChange: (date: string) => void;
+  onUpdateScheduleSlots: (key: string, slots: TimeSlot[]) => void;
+  onRemoveScheduleSlot: (key: string, slotId: string) => void;
 }
 
 function AddShiftForm({
@@ -89,10 +94,13 @@ function ScheduleGrid({
   weekDates,
   classColors,
   roster,
+  slots,
   onUpdateStaffNeeded,
   onUpdateShift,
   onAddShift,
   onRemoveShift,
+  onUpdateSlots,
+  onRemoveSlot,
 }: {
   facility: Facility;
   level: Level;
@@ -100,6 +108,7 @@ function ScheduleGrid({
   weekDates: string[];
   classColors: Record<string, string>;
   roster: TeachingAssistant[];
+  slots: TimeSlot[];
   onUpdateStaffNeeded: (shiftId: string, count: number) => void;
   onUpdateShift: (
     shiftId: string,
@@ -107,9 +116,10 @@ function ScheduleGrid({
   ) => void;
   onAddShift: (shift: Omit<Shift, 'id'>) => void;
   onRemoveShift: (shiftId: string) => void;
+  onUpdateSlots: (slots: TimeSlot[]) => void;
+  onRemoveSlot: (slotId: string) => void;
 }) {
   const key = getScheduleKey(facility, level);
-  const slots = SCHEDULE_SLOTS[key] ?? [];
   const days: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
   const [addingCell, setAddingCell] = useState<string | null>(null);
   const taOptions = roster.map((t) => t.abbreviation);
@@ -130,6 +140,16 @@ function ScheduleGrid({
   return (
     <div className="schedule-section">
       <h3 className="level-title">{LEVEL_LABELS[level]}</h3>
+      <TimeSlotsEditor
+        title={`Khung giờ ${LEVEL_LABELS[level]}`}
+        hint="Chỉnh / thêm ca để khớp Sheet hoặc mở ca đêm."
+        slots={slots}
+        idPrefix={key.replace('-', '')}
+        onChange={onUpdateSlots}
+        onRemoveSlot={(slotId) => {
+          onRemoveSlot(slotId);
+        }}
+      />
       <div className="table-wrapper">
         <table className="schedule-table">
           <thead>
@@ -281,12 +301,15 @@ export function ScheduleConfig({
   weekStart,
   roster,
   classColors,
+  scheduleSlots,
   onClassColorsChange,
   onUpdateStaffNeeded,
   onUpdateShift,
   onAddShift,
   onRemoveShift,
   onWeekStartChange,
+  onUpdateScheduleSlots,
+  onRemoveScheduleSlot,
 }: Props) {
   const weekDates = getWeekDates(weekStart);
   const [webhookUrl] = useLocalStorage('lich-sheets-webhook', '');
@@ -337,8 +360,9 @@ export function ScheduleConfig({
         </div>
       </div>
       <p className="hint">
-        Nhập số trợ giảng cần cho từng ca. <strong>TG cố định</strong> trên từng ca — xếp lịch chỉ
-        gán đúng người đó, ca khác sẽ né. GV trong ngoặc là giáo viên dạy (không phải TG).
+        Nhập số trợ giảng cần cho từng ca. Dùng <strong>Chỉnh khung giờ</strong> để thêm/sửa ca
+        (kể cả ca đêm) cho khớp Sheet. <strong>TG cố định</strong> trên từng ca — xếp lịch chỉ gán
+        đúng người đó. GV trong ngoặc là giáo viên dạy (không phải TG).
       </p>
 
       <div className="config-tools">
@@ -362,21 +386,27 @@ export function ScheduleConfig({
           <h2 className="facility-title">
             LỊCH LÀM VIỆC MÔN TIẾNG ANH {FACILITY_LABELS[facility].toUpperCase()}
           </h2>
-          {levels.map((level) => (
-            <ScheduleGrid
-              key={level}
-              facility={facility}
-              level={level}
-              shifts={shifts}
-              weekDates={weekDates}
-              classColors={classColors}
-              roster={roster}
-              onUpdateStaffNeeded={onUpdateStaffNeeded}
-              onUpdateShift={onUpdateShift}
-              onAddShift={onAddShift}
-              onRemoveShift={onRemoveShift}
-            />
-          ))}
+          {levels.map((level) => {
+            const key = getScheduleKey(facility, level);
+            return (
+              <ScheduleGrid
+                key={level}
+                facility={facility}
+                level={level}
+                shifts={shifts}
+                weekDates={weekDates}
+                classColors={classColors}
+                roster={roster}
+                slots={getScheduleSlotsForKey(key, scheduleSlots)}
+                onUpdateStaffNeeded={onUpdateStaffNeeded}
+                onUpdateShift={onUpdateShift}
+                onAddShift={onAddShift}
+                onRemoveShift={onRemoveShift}
+                onUpdateSlots={(slots) => onUpdateScheduleSlots(key, slots)}
+                onRemoveSlot={(slotId) => onRemoveScheduleSlot(key, slotId)}
+              />
+            );
+          })}
         </div>
       ))}
     </div>

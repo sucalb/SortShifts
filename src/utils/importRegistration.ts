@@ -1,16 +1,16 @@
-import type { DayOfWeek } from '../types';
-import { REGISTRATION_SLOTS } from '../data/constants';
+import type { DayOfWeek, TimeSlot } from '../types';
 import type { RegistrationGrid } from './registrationUtils';
 import { createEmptyRegistrationGrid } from './registrationUtils';
+import { getActiveRegistrationSlots } from './slotCatalog';
 
 function normalizeTime(s: string): string {
   return s.replace(/\s+/g, '').replace(/–/g, '-').toLowerCase();
 }
 
-function matchSlotRow(cell: string): number {
+function matchSlotRow(cell: string, slots: TimeSlot[]): number {
   const n = normalizeTime(cell);
-  for (let i = 0; i < REGISTRATION_SLOTS.length; i++) {
-    const label = normalizeTime(REGISTRATION_SLOTS[i].label);
+  for (let i = 0; i < slots.length; i++) {
+    const label = normalizeTime(slots[i].label);
     if (n === label || n.includes(label) || label.includes(n)) return i;
   }
   return -1;
@@ -32,7 +32,10 @@ function splitRow(line: string): string[] {
 }
 
 /** Parse TSV pasted from Google Sheets into registration grid */
-export function parseRegistrationImport(paste: string): {
+export function parseRegistrationImport(
+  paste: string,
+  registrationSlots: TimeSlot[] = getActiveRegistrationSlots(),
+): {
   grid: RegistrationGrid;
   filled: number;
 } | { error: string } {
@@ -46,7 +49,8 @@ export function parseRegistrationImport(paste: string): {
     return { error: 'Không có dữ liệu. Hãy copy vùng bảng từ Google Sheets.' };
   }
 
-  const grid = createEmptyRegistrationGrid();
+  const slots = registrationSlots.length > 0 ? registrationSlots : getActiveRegistrationSlots();
+  const grid = createEmptyRegistrationGrid(slots);
   const days: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
   let filled = 0;
   let sequentialRow = 0;
@@ -58,7 +62,10 @@ export function parseRegistrationImport(paste: string): {
     const nonEmpty = cells.filter((c) => c && c !== '—' && c !== '-');
     if (nonEmpty.length === 0) continue;
 
-    if (nonEmpty.every(isDateHeader) || (cells[0] === 'Ca' && nonEmpty.every((c, i) => i === 0 || isDateHeader(c)))) {
+    if (
+      nonEmpty.every(isDateHeader) ||
+      (cells[0] === 'Ca' && nonEmpty.every((c, i) => i === 0 || isDateHeader(c)))
+    ) {
       continue;
     }
 
@@ -66,7 +73,7 @@ export function parseRegistrationImport(paste: string): {
     let dayCells: string[];
 
     if (looksLikeTimeRow(cells[0])) {
-      slotIdx = matchSlotRow(cells[0]);
+      slotIdx = matchSlotRow(cells[0], slots);
       dayCells = cells.slice(1, 8);
     } else if (cells.length >= 7) {
       slotIdx = sequentialRow;
@@ -76,9 +83,9 @@ export function parseRegistrationImport(paste: string): {
       continue;
     }
 
-    if (slotIdx < 0 || slotIdx >= REGISTRATION_SLOTS.length) continue;
+    if (slotIdx < 0 || slotIdx >= slots.length) continue;
 
-    const slotId = REGISTRATION_SLOTS[slotIdx].id;
+    const slotId = slots[slotIdx].id;
 
     for (let d = 0; d < Math.min(7, dayCells.length); d++) {
       const val = dayCells[d]?.replace(/^—$|^-$/g, '').trim() ?? '';
@@ -91,18 +98,20 @@ export function parseRegistrationImport(paste: string): {
 
   if (filled === 0) {
     return {
-      error:
-        'Không đọc được ô nào. Copy cả bảng từ Sheets (7 cột ngày × 7 dòng ca). Có thể gồm cột giờ bên trái.',
+      error: `Không đọc được ô nào. Copy cả bảng từ Sheets (7 cột ngày × ${slots.length} dòng ca). Có thể gồm cột giờ bên trái.`,
     };
   }
 
   return { grid, filled };
 }
 
-export function registrationGridToTsv(grid: RegistrationGrid): string {
+export function registrationGridToTsv(
+  grid: RegistrationGrid,
+  registrationSlots: TimeSlot[] = getActiveRegistrationSlots(),
+): string {
   const days: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
   const header = ['Ca', ...days.map((_, i) => `Ngày ${i + 1}`)].join('\t');
-  const rows = REGISTRATION_SLOTS.map((slot) => {
+  const rows = registrationSlots.map((slot) => {
     const cells = days.map((d) => grid[d]?.[slot.id] ?? '');
     return [slot.label, ...cells].join('\t');
   });
