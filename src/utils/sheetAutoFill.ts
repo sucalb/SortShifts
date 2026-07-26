@@ -1,9 +1,12 @@
 import type { Shift } from '../types';
+import type { TeachingAssistant } from '../data/teachingAssistants';
 import type { ScheduleResult } from './scheduler';
+import { recomputeScheduleResult } from './scheduler';
 import {
   buildCellUpdatesPayload,
   countTemplateCells,
   fillFromSheetGrid,
+  pullAssignmentsFromSheetGrid,
   validateSheetGrid,
 } from './csvTemplateFill';
 import { buildClassColorMap } from './classColors';
@@ -99,4 +102,61 @@ export function formatAutoFillPreview(plan: AutoFillPlan): string {
     return `Khớp ${plan.matched} ca (CS1: ${plan.cs1}, CS2: ${plan.cs2})${tab}${cells}, ${plan.missed} ca không khớp. ${plan.missSamples.slice(0, 2).join('; ')}`;
   }
   return `Sẽ ghi ${plan.matched} ô (CS1: ${plan.cs1}, CS2: ${plan.cs2})${tab}${cells}`;
+}
+
+export interface SheetPullResult {
+  result: ScheduleResult;
+  tab: string;
+  matched: number;
+  empty: number;
+  missSamples: string[];
+  classColors: Record<string, string>;
+}
+
+export function formatSheetPullPreview(pull: SheetPullResult): string {
+  const colorNote =
+    Object.keys(pull.classColors).length > 0
+      ? ` · ${Object.keys(pull.classColors).length} màu lớp`
+      : '';
+  const missNote =
+    pull.missSamples.length > 0
+      ? ` · ${pull.missSamples.length}+ ca không khớp trên Sheet`
+      : '';
+  return `Đọc ${pull.matched} ca từ tab ${pull.tab}${colorNote}${missNote}`;
+}
+
+/** Đồng bộ phân công TG từ Google Sheet về app (chiều Sheet → App). */
+export async function syncScheduleFromSheet(
+  webhookUrl: string,
+  weekStart: string,
+  shifts: Shift[],
+  roster: TeachingAssistant[],
+): Promise<SheetPullResult> {
+  const weekTabHint = weekTabHintFromStart(weekStart);
+  const cacheKey = `${webhookUrl.trim()}|${weekTabHint}`;
+  gridCache.delete(cacheKey);
+
+  const scanned = await fetchSheetGrid(webhookUrl, weekTabHint);
+  gridCache.set(cacheKey, scanned.grid);
+
+  const check = validateSheetGrid(scanned.grid);
+  if (!check.ok) {
+    throw new Error(check.message);
+  }
+
+  const classColors = scanned.colorGrid?.length
+    ? buildClassColorMap(scanned.grid, scanned.colorGrid)
+    : {};
+
+  const pull = pullAssignmentsFromSheetGrid(scanned.grid, shifts, roster);
+  const { unfulfilled, stats } = recomputeScheduleResult(pull.assignments, shifts);
+
+  return {
+    result: { assignments: pull.assignments, unfulfilled, stats },
+    tab: scanned.tab,
+    matched: pull.matched,
+    empty: pull.empty,
+    missSamples: pull.missSamples,
+    classColors,
+  };
 }

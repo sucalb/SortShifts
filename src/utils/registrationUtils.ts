@@ -23,6 +23,33 @@ export function parseRegisteredNames(text: string): string[] {
     .filter((n) => n.length > 0);
 }
 
+/** Chuẩn hóa tên TG đọc từ Sheet về ký hiệu trong roster. */
+export function normalizeStaffNames(
+  names: string[],
+  roster: import('../data/teachingAssistants').TeachingAssistant[],
+): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const raw of names) {
+    const key = raw.trim();
+    if (!key) continue;
+    const upper = key.toUpperCase();
+    const ta = roster.find(
+      (t) =>
+        t.abbreviation.toUpperCase() === upper ||
+        t.fullName.toUpperCase() === upper,
+    );
+    const normalized = ta?.abbreviation ?? key;
+    const dedupeKey = normalized.toLowerCase();
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    result.push(normalized);
+  }
+
+  return result;
+}
+
 export function getCellText(
   grid: RegistrationGrid | undefined,
   day: DayOfWeek,

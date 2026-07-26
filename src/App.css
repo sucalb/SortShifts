@@ -192,6 +192,13 @@ body {
   font-weight: 700;
 }
 
+.user-auth-form-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--text-muted, #64748b);
+  line-height: 1.4;
+}
+
 .user-auth-field {
   display: flex;
   flex-direction: column;

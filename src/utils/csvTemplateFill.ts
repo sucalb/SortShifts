@@ -1,9 +1,11 @@
-import type { DayOfWeek, Facility, Level, Shift } from '../types';
+import type { DayOfWeek, Facility, Level, Shift, Assignment } from '../types';
 import { FACILITY_LABELS, LEVEL_LABELS } from '../data/constants';
 import type { ScheduleResult } from './scheduler';
 import { formatClassLabel } from './exportSchedule';
 import { getShiftTimeSlot } from './timeUtils';
 import { parseCsv, serializeCsv } from './csvParse';
+import type { TeachingAssistant } from '../data/teachingAssistants';
+import { normalizeStaffNames, parseRegisteredNames } from './registrationUtils';
 
 export interface CellUpdate {
   row: number;
@@ -522,6 +524,71 @@ export function filledCsvToText(result: FillTemplateResult): string {
 /** Kiểm tra template CSV có đọc được layout không */
 export function validateCsvTemplate(csvText: string): { ok: boolean; indexSize: number; message: string } {
   return validateSheetGrid(parseCsv(csvText));
+}
+
+export interface PullFromSheetResult {
+  assignments: Assignment[];
+  matched: number;
+  empty: number;
+  missSamples: string[];
+}
+
+/** Đọc phân công TG từ cột tên trên Sheet (chiều Sheet → App). */
+export function pullAssignmentsFromSheetGrid(
+  grid: string[][],
+  shifts: Shift[],
+  roster: TeachingAssistant[],
+): PullFromSheetResult {
+  const index = buildTemplateIndex(grid);
+  const assignments: Assignment[] = [];
+  const used = new Set<string>();
+  const missSamples: string[] = [];
+  let matched = 0;
+  let empty = 0;
+
+  for (const shift of shifts) {
+    const slot = getShiftTimeSlot(shift);
+    if (!slot) continue;
+
+    const classLabel = formatClassLabel(shift);
+    const hit = findCell(
+      grid,
+      index,
+      shift.facility,
+      shift.level,
+      shift.day,
+      slot.label,
+      shift.className,
+      classLabel,
+      used,
+    );
+
+    if (!hit) {
+      if (missSamples.length < 3) {
+        missSamples.push(
+          `${FACILITY_LABELS[shift.facility]} ${LEVEL_LABELS[shift.level]} ${shift.day} ${slot.label} ${classLabel}`,
+        );
+      }
+      continue;
+    }
+
+    const raw = (grid[hit.row]?.[hit.nameCol] ?? '').trim();
+    if (!raw) {
+      empty++;
+      continue;
+    }
+
+    const staffIds = normalizeStaffNames(parseRegisteredNames(raw), roster);
+    if (staffIds.length === 0) {
+      empty++;
+      continue;
+    }
+
+    matched++;
+    assignments.push({ shiftId: shift.id, staffIds });
+  }
+
+  return { assignments, matched, empty, missSamples };
 }
 
 export function buildCellUpdatesPayload(

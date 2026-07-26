@@ -3,6 +3,7 @@ import type { Shift, TeacherFixedTaMap, UserConfigSnapshot } from '../types';
 import type { TeachingAssistant } from '../data/teachingAssistants';
 import type { SlotOverrides } from '../utils/slotAccess';
 import type { RegistrationGrid } from '../utils/registrationUtils';
+import type { ScheduleResult } from '../utils/scheduler';
 import {
   clearSession,
   fetchCurrentUser,
@@ -24,6 +25,7 @@ export interface ConfigState {
   slotOverrides?: SlotOverrides;
   classColors: Record<string, string>;
   fixedTaMap: TeacherFixedTaMap;
+  scheduleResult: ScheduleResult | null;
 }
 
 export interface ConfigSetters {
@@ -34,6 +36,7 @@ export interface ConfigSetters {
   setSlotOverrides: (value: SlotOverrides | undefined) => void;
   setClassColors: (value: Record<string, string>) => void;
   setFixedTaMap: (value: TeacherFixedTaMap) => void;
+  setScheduleResult: (value: ScheduleResult | null | ((prev: ScheduleResult | null) => ScheduleResult | null)) => void;
 }
 
 function readSheetsSettings() {
@@ -70,6 +73,7 @@ function applySnapshot(config: UserConfigSnapshot, setters: ConfigSetters) {
   setters.setSlotOverrides(config.slotOverrides);
   setters.setClassColors(config.classColors ?? {});
   setters.setFixedTaMap(config.fixedTaMap ?? {});
+  setters.setScheduleResult(config.scheduleResult ?? null);
   applySheetsSettings(config.sheetsWebhook ?? '', Boolean(config.sheetsAutoPush));
 }
 

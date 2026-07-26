@@ -1,17 +1,25 @@
 import { useState } from 'react';
 import type { Shift } from '../types';
+import type { TeachingAssistant } from '../data/teachingAssistants';
 import type { ScheduleResult } from '../utils/scheduler';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import { buildAutoFillPlan, formatAutoFillPreview } from '../utils/sheetAutoFill';
+import {
+  buildAutoFillPlan,
+  formatAutoFillPreview,
+  formatSheetPullPreview,
+  syncScheduleFromSheet,
+} from '../utils/sheetAutoFill';
 import { checkScriptVersion, pushCellUpdates, weekTabHintFromStart } from '../utils/sheetsSync';
 
 interface Props {
   shifts: Shift[];
-  result: ScheduleResult;
+  result: ScheduleResult | null;
   weekStart: string;
+  roster: TeachingAssistant[];
+  onSyncFromSheet: (result: ScheduleResult, classColors?: Record<string, string>) => void;
 }
 
-export function SheetsSyncPanel({ shifts, result, weekStart }: Props) {
+export function SheetsSyncPanel({ shifts, result, weekStart, roster, onSyncFromSheet }: Props) {
   const [webhookUrl, setWebhookUrl] = useLocalStorage('lich-sheets-webhook', '');
   const [autoPush, setAutoPush] = useLocalStorage('lich-sheets-auto-push', false);
   const [showSetup, setShowSetup] = useState(!webhookUrl);
@@ -33,6 +41,10 @@ export function SheetsSyncPanel({ shifts, result, weekStart }: Props) {
   };
 
   const handlePush = async () => {
+    if (!result) {
+      setStatus({ type: 'err', text: 'Chưa có kết quả xếp lịch — xếp lịch trước khi điền Sheet.' });
+      return;
+    }
     setStatus({ type: 'loading', text: 'Đang đọc Sheet và khớp ca…' });
     try {
       const plan = await buildAutoFillPlan(shifts, result, weekStart, webhookUrl);
@@ -64,6 +76,33 @@ export function SheetsSyncPanel({ shifts, result, weekStart }: Props) {
     }
   };
 
+  const handlePullFromSheet = async () => {
+    setStatus({ type: 'loading', text: 'Đang đọc phân công từ Sheet…' });
+    try {
+      const pull = await syncScheduleFromSheet(webhookUrl, weekStart, shifts, roster);
+      if (pull.matched === 0) {
+        setStatus({
+          type: 'err',
+          text:
+            pull.missSamples.length > 0
+              ? `Không đọc được ca nào từ Sheet. Ví dụ không khớp: ${pull.missSamples.slice(0, 2).join('; ')}`
+              : 'Sheet chưa có tên TG — điền tên vào cột trái mỗi ca trước khi đồng bộ.',
+        });
+        return;
+      }
+      onSyncFromSheet(pull.result, pull.classColors);
+      setStatus({
+        type: 'ok',
+        text: `${formatSheetPullPreview(pull)} · ${pull.result.stats.totalSlotsFilled}/${pull.result.stats.totalSlotsNeeded} slot đã xếp`,
+      });
+    } catch (err) {
+      setStatus({
+        type: 'err',
+        text: err instanceof Error ? err.message : 'Không đồng bộ được từ Sheet.',
+      });
+    }
+  };
+
   return (
     <div className="sheets-sync-panel">
       <div className="sheets-sync-header">
@@ -75,8 +114,8 @@ export function SheetsSyncPanel({ shifts, result, weekStart }: Props) {
             />
           </svg>
           <div>
-            <strong>Điền vào Google Sheets</strong>
-            <p>Đọc mã lớp trực tiếp từ tab tuần trên Sheet — không cần export CSV</p>
+            <strong>Google Sheets</strong>
+            <p>Đẩy lịch xếp lên Sheet hoặc đồng bộ ngược sau khi chỉnh sửa trên Sheet</p>
             <p className="sheets-week-hint">
               Tab đích: <strong>TUẦN {weekTabHint}</strong> (tuần bắt đầu {weekStart})
             </p>
@@ -184,11 +223,21 @@ export function SheetsSyncPanel({ shifts, result, weekStart }: Props) {
         </button>
         <button
           type="button"
+          className="btn btn-secondary btn-sm sheets-pull-btn"
+          onClick={handlePullFromSheet}
+          disabled={!webhookUrl.trim() || status?.type === 'loading'}
+          title="Đọc tên TG từ Sheet về app sau khi bạn chỉnh sửa trên Sheet"
+        >
+          {status?.type === 'loading' ? 'Đang đồng bộ…' : 'Đồng bộ từ Sheet'}
+        </button>
+        <button
+          type="button"
           className="btn btn-primary btn-sm sheets-push-btn"
           onClick={handlePush}
-          disabled={!webhookUrl.trim() || status?.type === 'loading'}
+          disabled={!webhookUrl.trim() || !result || status?.type === 'loading'}
+          title="Ghi phân công TG từ app lên Sheet"
         >
-          {status?.type === 'loading' ? 'Đang gửi…' : 'Điền vào Google Sheets'}
+          {status?.type === 'loading' ? 'Đang gửi…' : 'Điền lên Sheet'}
         </button>
         {!webhookUrl.trim() && (
           <span className="sheets-hint">Cần cấu hình URL Apps Script trước</span>

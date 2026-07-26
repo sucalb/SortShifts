@@ -39,6 +39,7 @@ interface Props {
   onRunSchedule: () => void;
   onClearAssignments: () => void;
   onUpdateAssignment: (shiftId: string, staffIds: string[]) => void;
+  onSyncFromSheet: (result: ScheduleResult, classColors?: Record<string, string>) => void;
 }
 
 function EditableAssignmentBlock({
@@ -237,6 +238,7 @@ export function ScheduleResultView({
   onRunSchedule,
   onClearAssignments,
   onUpdateAssignment,
+  onSyncFromSheet,
 }: Props) {
   const weekDates = getWeekDates(weekStart);
   const [copyMsg, setCopyMsg] = useState('');
@@ -279,8 +281,17 @@ export function ScheduleResultView({
       {!result && (
         <div className="empty-state">
           Nhấn &quot;Xếp lịch tự động&quot; sau khi đã cấu hình ca và điền tên TG vào lịch đăng ký.
+          Bạn cũng có thể dùng &quot;Đồng bộ từ Sheet&quot; bên dưới nếu đã điền lịch trên Google Sheets.
         </div>
       )}
+
+      <SheetsSyncPanel
+        shifts={shifts}
+        result={result}
+        weekStart={weekStart}
+        roster={roster}
+        onSyncFromSheet={onSyncFromSheet}
+      />
 
       {result && (
         <>
@@ -350,8 +361,6 @@ export function ScheduleResultView({
               {copyMsg && <span className="copy-feedback">{copyMsg}</span>}
             </div>
           </div>
-
-          <SheetsSyncPanel shifts={shifts} result={result} weekStart={weekStart} />
 
           {(['coso1', 'coso2'] as const).map((facility) => (
             <div key={facility} className="facility-block">

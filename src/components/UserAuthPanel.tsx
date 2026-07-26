@@ -105,6 +105,9 @@ export function UserAuthPanel({
       {open && (
         <form className="user-auth-form" onSubmit={(e) => void handleSubmit(e)}>
           <p className="user-auth-form-title">Tài khoản local</p>
+          <p className="user-auth-form-hint">
+            Đăng nhập để lưu cấu hình ca, đăng ký lịch và kết quả xếp gần nhất.
+          </p>
           <label className="user-auth-field">
             <span>Tên đăng nhập</span>
             <input

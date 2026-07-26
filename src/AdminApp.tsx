@@ -97,7 +97,10 @@ export function AdminApp() {
     'lich-teacher-fixed-ta',
     {},
   );
-  const [scheduleResult, setScheduleResult] = useState<ScheduleResult | null>(null);
+  const [scheduleResult, setScheduleResult] = useLocalStorage<ScheduleResult | null>(
+    'lich-schedule-result',
+    null,
+  );
 
   const configState = useMemo(
     () => ({
@@ -108,8 +111,9 @@ export function AdminApp() {
       slotOverrides,
       classColors,
       fixedTaMap,
+      scheduleResult,
     }),
-    [weekStart, shifts, roster, registrationGrid, slotOverrides, classColors, fixedTaMap],
+    [weekStart, shifts, roster, registrationGrid, slotOverrides, classColors, fixedTaMap, scheduleResult],
   );
 
   const configSetters = useMemo(
@@ -121,6 +125,7 @@ export function AdminApp() {
       setSlotOverrides,
       setClassColors,
       setFixedTaMap,
+      setScheduleResult,
     }),
     [
       setWeekStart,
@@ -130,6 +135,7 @@ export function AdminApp() {
       setSlotOverrides,
       setClassColors,
       setFixedTaMap,
+      setScheduleResult,
     ],
   );
 
@@ -251,7 +257,17 @@ export function AdminApp() {
         return { assignments, unfulfilled, stats };
       });
     },
-    [shifts],
+    [shifts, setScheduleResult],
+  );
+
+  const handleSyncFromSheet = useCallback(
+    (result: ScheduleResult, nextClassColors?: Record<string, string>) => {
+      setScheduleResult(result);
+      if (nextClassColors && Object.keys(nextClassColors).length > 0) {
+        setClassColors(nextClassColors);
+      }
+    },
+    [setScheduleResult, setClassColors],
   );
 
   const page = PAGE_META[tab];
@@ -306,8 +322,8 @@ export function AdminApp() {
             <span className="sidebar-promo-tag">{session ? 'Đồng bộ tài khoản' : 'Lưu tự động'}</span>
             <p>
               {session
-                ? `Cấu hình của ${session.username} được lưu trên server và tự động đồng bộ.`
-                : 'Dữ liệu được giữ trên trình duyệt. Đăng nhập để lưu cấu hình theo tài khoản.'}
+                ? `Cấu hình & lịch xếp gần nhất của ${session.username} được lưu trên server.`
+                : 'Dữ liệu được giữ trên trình duyệt. Đăng nhập hoangbui24 để lưu cấu hình theo tài khoản.'}
             </p>
           </div>
         </aside>
@@ -358,6 +374,7 @@ export function AdminApp() {
                 onRunSchedule={handleRunSchedule}
                 onClearAssignments={() => setScheduleResult(null)}
                 onUpdateAssignment={handleUpdateAssignment}
+                onSyncFromSheet={handleSyncFromSheet}
               />
             )}
           </main>
