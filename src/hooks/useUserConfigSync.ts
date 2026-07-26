@@ -16,6 +16,7 @@ import {
   login as apiLogin,
   logout as apiLogout,
   saveUserConfig,
+  storeSession,
   type AuthSession,
 } from '../api/userConfigApi';
 
@@ -103,25 +104,38 @@ export function useUserConfigSync(state: ConfigState, setters: ConfigSetters) {
     async (nextSession: AuthSession) => {
       setSyncStatus('loading');
       setSyncError(null);
+
+      // Trên Vercel / production tĩnh: luôn dùng chế độ trình duyệt
+      const onStaticHost =
+        import.meta.env.PROD &&
+        typeof window !== 'undefined' &&
+        (window.location.hostname.includes('vercel.app') ||
+          window.location.hostname !== 'localhost');
+      const session: AuthSession =
+        onStaticHost && nextSession.mode === 'server'
+          ? {
+              token: `local:${nextSession.username}:restored`,
+              username: nextSession.username,
+              mode: 'browser',
+            }
+          : nextSession;
+
       try {
-        await fetchCurrentUser(nextSession.token, nextSession.mode);
-        const config = await fetchUserConfig(
-          nextSession.token,
-          nextSession.mode,
-          nextSession.username,
-        );
+        await fetchCurrentUser(session.token, session.mode);
+        const config = await fetchUserConfig(session.token, session.mode, session.username);
         if (config) {
           skipNextSave.current = true;
           applySnapshot(config, setters);
           setLastSavedAt(config.updatedAt ?? null);
-        } else if (nextSession.mode === 'browser') {
-          // Lần đầu trên Vercel: giữ config đang có trên trình duyệt
+        } else if (session.mode === 'browser') {
           setLastSavedAt(new Date().toISOString());
         }
-        setSession(nextSession);
+        if (session.mode !== nextSession.mode || session.token !== nextSession.token) {
+          storeSession(session);
+        }
+        setSession(session);
         setSyncStatus('saved');
       } catch (err) {
-        // Phiên server cũ trên Vercel → chuyển sang bỏ phiên, không crash UI
         clearSession();
         setSession(null);
         setSyncStatus('error');

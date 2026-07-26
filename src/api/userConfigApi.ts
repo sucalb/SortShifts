@@ -21,13 +21,35 @@ class ApiUnavailableError extends Error {
   }
 }
 
-function isNetworkFailure(err: unknown): boolean {
+function isCredentialError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return /sai tên đăng nhập|không hợp lệ|vui lòng nhập/i.test(err.message);
+}
+
+function isApiUnavailable(err: unknown): boolean {
   if (err instanceof ApiUnavailableError) return true;
   if (err instanceof TypeError) return true;
+  if (err instanceof SyntaxError) return true;
   if (err instanceof Error) {
-    return /kết nối|failed to fetch|network|502|503|504/i.test(err.message);
+    return /kết nối|failed to fetch|network|api không|unexpected token|json|502|503|504|404|405/i.test(
+      err.message,
+    );
   }
   return false;
+}
+
+async function parseJsonResponse<T>(res: Response): Promise<T> {
+  const contentType = res.headers.get('content-type') ?? '';
+  const text = await res.text();
+  // Vercel SPA rewrite thường trả HTML 200 cho /api/*
+  if (!contentType.includes('application/json') || text.trimStart().startsWith('<')) {
+    throw new ApiUnavailableError('API không có trên môi trường này');
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new ApiUnavailableError('API không có trên môi trường này');
+  }
 }
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
@@ -38,19 +60,20 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
       ...options,
     });
   } catch {
-    throw new ApiUnavailableError(
-      'Không kết nối được server. Chạy npm run dev:all (cần cả API ở cổng 3001).',
-    );
+    throw new ApiUnavailableError('Không kết nối được server API');
   }
+
   if (!res.ok) {
-    // Vercel static deploy often returns HTML 404 for /api/*
-    if (res.status === 404 || res.status === 405) {
+    if (res.status === 404 || res.status === 405 || res.status >= 500) {
       throw new ApiUnavailableError('API không có trên môi trường này');
     }
-    const err = await res.json().catch(() => ({ error: res.statusText }));
+    const err = await parseJsonResponse<{ error?: string }>(res).catch(() => ({
+      error: res.statusText,
+    }));
     throw new Error(err.error || `Lỗi server (${res.status})`);
   }
-  return res.json() as Promise<T>;
+
+  return parseJsonResponse<T>(res);
 }
 
 export function getStoredSession(): AuthSession | null {
@@ -117,7 +140,19 @@ async function loginLocal(username: string, password: string): Promise<AuthSessi
   return session;
 }
 
+/** Production tĩnh (Vercel) không có Express — dùng auth trình duyệt ngay. */
+function preferBrowserAuth(): boolean {
+  if (!import.meta.env.PROD) return false;
+  if (typeof window === 'undefined') return true;
+  const host = window.location.hostname;
+  return host.includes('vercel.app') || host !== 'localhost';
+}
+
 export async function login(username: string, password: string): Promise<AuthSession> {
+  if (preferBrowserAuth()) {
+    return loginLocal(username, password);
+  }
+
   try {
     const result = await request<{ token: string; username: string }>('/api/auth/login', {
       method: 'POST',
@@ -131,9 +166,11 @@ export async function login(username: string, password: string): Promise<AuthSes
     storeSession(session);
     return session;
   } catch (err) {
-    if (!isNetworkFailure(err)) throw err;
-    // Vercel / không có API → đăng nhập local trên trình duyệt
-    return loginLocal(username, password);
+    if (isCredentialError(err)) throw err;
+    if (isApiUnavailable(err) || !isCredentialError(err)) {
+      return loginLocal(username, password);
+    }
+    throw err;
   }
 }
 
