@@ -1,8 +1,15 @@
 import type { Assignment, Shift, TeacherFixedTaMap } from '../types';
 import type { RegistrationGrid } from './registrationUtils';
 import { countTARegistrations, getEligibleNamesForShift } from './registrationUtils';
-import { getFixedTasForShift, isTaReservedForOtherShift, shiftHasFixedTaRule } from './fixedTa';
-import { isNameAssignedToConflictingShift } from './assignmentValidation';
+import { getFixedTasForShift } from './fixedTa';
+import type { ContiguityWeights, ShiftInterval } from './shiftContiguity';
+import {
+  DEFAULT_ADJACENT_GAP_MINUTES,
+  DEFAULT_CONTIGUITY_WEIGHTS,
+  getShiftInterval,
+  intervalsConflict,
+  taFragmentationCost,
+} from './shiftContiguity';
 import type { SlotOverrides } from './slotAccess';
 import type { TeachingAssistant } from '../data/teachingAssistants';
 
@@ -131,63 +138,266 @@ export function recomputeScheduleResult(
   };
 }
 
+export interface AutoScheduleOptions {
+  /** Ưu tiên nối ca liền nhau, hạn chế ca lẻ (mặc định bật) */
+  preferContiguous?: boolean;
+  /** Khoảng nghỉ tối đa (phút) vẫn coi 2 ca là liền nhau */
+  adjacentGapMinutes?: number;
+  /** Điều chỉnh mức phạt của mô hình chi phí */
+  weights?: Partial<ContiguityWeights>;
+  /** Số vòng tối ưu lại sau khi xếp lần đầu */
+  maxImprovePasses?: number;
+}
+
+const EPS = 1e-9;
+
 export function autoSchedule(
   shifts: Shift[],
   registrationGrid: RegistrationGrid | undefined,
   slotOverrides?: SlotOverrides,
   fixedTaMap: TeacherFixedTaMap = {},
+  options: AutoScheduleOptions = {},
 ): ScheduleResult {
-  const assignments: Assignment[] = [];
+  const {
+    preferContiguous = true,
+    adjacentGapMinutes = DEFAULT_ADJACENT_GAP_MINUTES,
+    maxImprovePasses = 6,
+  } = options;
+  const weights: ContiguityWeights = { ...DEFAULT_CONTIGUITY_WEIGHTS, ...options.weights };
+
+  // --- Dữ liệu tra cứu ---
+  const intervalByShift = new Map<string, ShiftInterval>();
+  const eligibleByShift = new Map<string, string[]>();
+  const eligibleSetByShift = new Map<string, Set<string>>();
+  const fixedByShift = new Map<string, string[]>();
+  const fixedShiftsByName = new Map<string, Set<string>>();
+
+  for (const shift of shifts) {
+    const interval = getShiftInterval(shift);
+    if (interval) intervalByShift.set(shift.id, interval);
+
+    const eligible = getEligibleNamesForShift(shift, registrationGrid, slotOverrides);
+    eligibleByShift.set(shift.id, eligible);
+    eligibleSetByShift.set(shift.id, new Set(eligible));
+
+    const fixed = getFixedTasForShift(shift, fixedTaMap);
+    fixedByShift.set(shift.id, fixed);
+    for (const name of fixed) {
+      const set = fixedShiftsByName.get(name);
+      if (set) set.add(shift.id);
+      else fixedShiftsByName.set(name, new Set([shift.id]));
+    }
+  }
+
+  /** TG đã được giữ chỗ cho một ca cố định khác — không xếp tự do vào đây. */
+  const isReservedForOther = (name: string, shiftId: string): boolean => {
+    const set = fixedShiftsByName.get(name);
+    if (!set) return false;
+    for (const id of set) {
+      if (id !== shiftId) return true;
+    }
+    return false;
+  };
+
+  // --- Trạng thái đang xếp ---
+  const assignedByShift = new Map<string, string[]>(shifts.map((s) => [s.id, []]));
+  const intervalsByTa = new Map<string, ShiftInterval[]>();
+
+  const listFor = (name: string): ShiftInterval[] => intervalsByTa.get(name) ?? [];
+  const cost = (intervals: ShiftInterval[]): number =>
+    taFragmentationCost(intervals, weights, adjacentGapMinutes);
+  const costWithout = (name: string, shiftId: string): number =>
+    cost(listFor(name).filter((iv) => iv.shiftId !== shiftId));
+  const costWith = (name: string, interval: ShiftInterval): number =>
+    cost([...listFor(name), interval]);
+  const conflicts = (name: string, interval: ShiftInterval, excludeShiftId?: string): boolean =>
+    intervalsConflict(listFor(name), interval, excludeShiftId);
+
+  const assign = (shiftId: string, name: string) => {
+    const interval = intervalByShift.get(shiftId);
+    if (!interval) return;
+    assignedByShift.get(shiftId)?.push(name);
+    const list = intervalsByTa.get(name);
+    if (list) list.push(interval);
+    else intervalsByTa.set(name, [interval]);
+  };
+
+  const unassign = (shiftId: string, name: string) => {
+    const assigned = assignedByShift.get(shiftId);
+    if (assigned) {
+      const at = assigned.indexOf(name);
+      if (at >= 0) assigned.splice(at, 1);
+    }
+    const list = intervalsByTa.get(name);
+    if (list) {
+      const at = list.findIndex((iv) => iv.shiftId === shiftId);
+      if (at >= 0) list.splice(at, 1);
+    }
+  };
+
+  // Ca nào có quy tắc TG cố định thì chỉ dùng đúng những TG đó.
+  const isFixedOnly = (shiftId: string) => (fixedByShift.get(shiftId)?.length ?? 0) > 0;
+
   const sortedShifts = [...shifts].sort((a, b) => {
-    const eligibleA = getEligibleNamesForShift(a, registrationGrid, slotOverrides).length;
-    const eligibleB = getEligibleNamesForShift(b, registrationGrid, slotOverrides).length;
+    const eligibleA = eligibleByShift.get(a.id)?.length ?? 0;
+    const eligibleB = eligibleByShift.get(b.id)?.length ?? 0;
     if (eligibleA !== eligibleB) return eligibleA - eligibleB;
-    const fixedA = shiftHasFixedTaRule(a, fixedTaMap) ? 1 : 0;
-    const fixedB = shiftHasFixedTaRule(b, fixedTaMap) ? 1 : 0;
-    if (fixedA !== fixedB) return fixedB - fixedA;
-    return b.staffNeeded - a.staffNeeded;
+    if (a.staffNeeded !== b.staffNeeded) return b.staffNeeded - a.staffNeeded;
+    // Cùng độ khó thì xếp theo thứ tự thời gian để dễ nối ca liền nhau.
+    const ivA = intervalByShift.get(a.id);
+    const ivB = intervalByShift.get(b.id);
+    if (ivA && ivB) {
+      if (ivA.day !== ivB.day) return ivA.day - ivB.day;
+      if (ivA.start !== ivB.start) return ivA.start - ivB.start;
+    }
+    return a.id.localeCompare(b.id);
   });
 
+  // --- Bước 1: chốt TG cố định trước, tránh bị ca tự do chiếm mất ---
   for (const shift of sortedShifts) {
-    const needed = shift.staffNeeded;
-    const assigned: string[] = [];
-    const eligible = getEligibleNamesForShift(shift, registrationGrid, slotOverrides);
-    const fixedOnly = shiftHasFixedTaRule(shift, fixedTaMap);
-
-    for (const name of getFixedTasForShift(shift, fixedTaMap)) {
-      if (assigned.length >= needed) break;
-      if (!eligible.includes(name)) continue;
+    const interval = intervalByShift.get(shift.id);
+    if (!interval) continue;
+    const eligible = eligibleSetByShift.get(shift.id);
+    const assigned = assignedByShift.get(shift.id) ?? [];
+    for (const name of fixedByShift.get(shift.id) ?? []) {
+      if (assigned.length >= shift.staffNeeded) break;
+      if (!eligible?.has(name)) continue;
       if (assigned.includes(name)) continue;
-      if (isNameAssignedToConflictingShift(name, shift, assignments, shifts)) continue;
-      assigned.push(name);
+      if (conflicts(name, interval)) continue;
+      assign(shift.id, name);
     }
+  }
 
-    if (!fixedOnly) {
-      const candidates = eligible
-        .filter((name) => !assigned.includes(name))
-        .filter((name) => !isTaReservedForOtherShift(name, shift, shifts, fixedTaMap))
-        .filter((name) => !isNameAssignedToConflictingShift(name, shift, assignments, shifts))
-        .sort((a, b) => {
-          const loadA = assignments.reduce(
-            (sum, asn) => sum + (asn.staffIds.includes(a) ? 1 : 0),
-            0,
-          );
-          const loadB = assignments.reduce(
-            (sum, asn) => sum + (asn.staffIds.includes(b) ? 1 : 0),
-            0,
-          );
-          return loadA - loadB;
-        });
+  // --- Bước 2: xếp các ca còn lại, ưu tiên TG có ca liền kề ---
+  const fillShift = (shift: Shift) => {
+    if (isFixedOnly(shift.id)) return;
+    const interval = intervalByShift.get(shift.id);
+    if (!interval) return;
+    const assigned = assignedByShift.get(shift.id) ?? [];
 
-      for (const candidate of candidates) {
-        if (assigned.length >= needed) break;
-        if (assigned.includes(candidate)) continue;
-        assigned.push(candidate);
+    while (assigned.length < shift.staffNeeded) {
+      const scored = (eligibleByShift.get(shift.id) ?? [])
+        .filter(
+          (name) =>
+            !assigned.includes(name) &&
+            !isReservedForOther(name, shift.id) &&
+            !conflicts(name, interval),
+        )
+        .map((name) => {
+          const load = listFor(name).length;
+          const delta = preferContiguous ? costWith(name, interval) - cost(listFor(name)) : load;
+          return { name, delta, load };
+        })
+        .sort(
+          (a, b) =>
+            a.delta - b.delta || a.load - b.load || a.name.localeCompare(b.name, 'vi'),
+        );
+
+      if (scored.length === 0) break;
+      assign(shift.id, scored[0].name);
+    }
+  };
+
+  for (const shift of sortedShifts) {
+    fillShift(shift);
+  }
+
+  // --- Bước 3: tối ưu lại — đổi chỗ/thay người nếu giảm được độ rời rạc ---
+  const movableShifts = sortedShifts.filter(
+    (s) => !isFixedOnly(s.id) && intervalByShift.has(s.id),
+  );
+
+  /** Danh sách ca của TG sau khi bỏ `removeShiftId` và thêm `add`. */
+  const listAfterSwap = (name: string, removeShiftId: string, add: ShiftInterval) => [
+    ...listFor(name).filter((iv) => iv.shiftId !== removeShiftId),
+    add,
+  ];
+
+  const canTake = (name: string, shift: Shift, interval: ShiftInterval, fromShiftId?: string) =>
+    eligibleSetByShift.get(shift.id)?.has(name) === true &&
+    !isReservedForOther(name, shift.id) &&
+    !assignedByShift.get(shift.id)?.includes(name) &&
+    !conflicts(name, interval, fromShiftId);
+
+  const runImprovePass = (): boolean => {
+    let improved = false;
+
+    // 3a. Hoán đổi 2 TG giữa 2 ca — tổng số ca mỗi người không đổi.
+    for (let i = 0; i < movableShifts.length; i++) {
+      const shiftA = movableShifts[i];
+      const ivA = intervalByShift.get(shiftA.id)!;
+      const listA = assignedByShift.get(shiftA.id)!;
+
+      for (let j = i + 1; j < movableShifts.length; j++) {
+        const shiftB = movableShifts[j];
+        const ivB = intervalByShift.get(shiftB.id)!;
+        const listB = assignedByShift.get(shiftB.id)!;
+
+        for (const nameA of [...listA]) {
+          if (!listA.includes(nameA)) continue;
+          for (const nameB of [...listB]) {
+            if (nameA === nameB) continue;
+            if (!listA.includes(nameA) || !listB.includes(nameB)) continue;
+            if (!canTake(nameA, shiftB, ivB, shiftA.id)) continue;
+            if (!canTake(nameB, shiftA, ivA, shiftB.id)) continue;
+
+            const before = cost(listFor(nameA)) + cost(listFor(nameB));
+            const after =
+              cost(listAfterSwap(nameA, shiftA.id, ivB)) +
+              cost(listAfterSwap(nameB, shiftB.id, ivA));
+            if (after >= before - EPS) continue;
+
+            unassign(shiftA.id, nameA);
+            unassign(shiftB.id, nameB);
+            assign(shiftA.id, nameB);
+            assign(shiftB.id, nameA);
+            improved = true;
+          }
+        }
       }
     }
 
-    if (assigned.length > 0) {
-      assignments.push({ shiftId: shift.id, staffIds: assigned });
+    // 3b. Thay một TG bằng TG khác đang rảnh nếu lịch gọn hơn.
+    for (const shift of movableShifts) {
+      const interval = intervalByShift.get(shift.id)!;
+      const assigned = assignedByShift.get(shift.id)!;
+
+      for (const current of [...assigned]) {
+        if (!assigned.includes(current)) continue;
+        for (const alt of eligibleByShift.get(shift.id) ?? []) {
+          if (alt === current) continue;
+          if (!canTake(alt, shift, interval)) continue;
+
+          const before = cost(listFor(current)) + cost(listFor(alt));
+          const after = costWithout(current, shift.id) + costWith(alt, interval);
+          if (after >= before - EPS) continue;
+
+          unassign(shift.id, current);
+          assign(shift.id, alt);
+          improved = true;
+          break;
+        }
+      }
+    }
+
+    return improved;
+  };
+
+  if (preferContiguous) {
+    for (let pass = 0; pass < maxImprovePasses; pass++) {
+      if (!runImprovePass()) break;
+    }
+    // Bước 3b có thể giải phóng người — thử lấp lại các ca còn thiếu.
+    for (const shift of sortedShifts) {
+      fillShift(shift);
+    }
+  }
+
+  const assignments: Assignment[] = [];
+  for (const shift of shifts) {
+    const staffIds = assignedByShift.get(shift.id) ?? [];
+    if (staffIds.length > 0) {
+      assignments.push({ shiftId: shift.id, staffIds: [...staffIds] });
     }
   }
 
