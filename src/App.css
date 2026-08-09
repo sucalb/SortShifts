@@ -2394,3 +2394,79 @@ html {
   font-size: 0.75rem;
   color: #b42318;
 }
+
+/* ── Báo cáo ca lẻ ── */
+.lone-shift-report {
+  margin-bottom: 1.25rem;
+  padding: 1.25rem;
+  border: 2px solid var(--black);
+  background: var(--accent-yellow);
+  box-shadow: var(--shadow-hard-sm);
+}
+
+.lone-shift-header h3 {
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  margin: 0;
+}
+
+.lone-shift-desc {
+  margin: 0.35rem 0 0.85rem;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.lone-shift-fixable-count {
+  color: var(--accent);
+}
+
+.lone-shift-table {
+  background: var(--surface);
+}
+
+.lone-shift-table td {
+  vertical-align: top;
+  font-size: 0.82rem;
+}
+
+.lone-shift-row--fixable {
+  background: var(--accent-soft);
+}
+
+.lone-shift-fullname {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.lone-shift-slot {
+  min-width: 15rem;
+}
+
+.lone-shift-reason {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 1px solid var(--black);
+  box-shadow: 1px 1px 0 var(--black);
+  background: var(--surface-2);
+}
+
+.lone-shift-reason--adjacent-open {
+  background: var(--accent-green);
+}
+
+.lone-shift-reason--adjacent-full,
+.lone-shift-reason--adjacent-reserved {
+  background: var(--accent-red);
+}
+
+.lone-shift-hint {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}

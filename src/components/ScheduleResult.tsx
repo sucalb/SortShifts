@@ -1,4 +1,4 @@
-import type { Assignment, Shift } from '../types';
+import type { Assignment, Shift, TeacherFixedTaMap } from '../types';
 import { useState } from 'react';
 import type { TeachingAssistant } from '../data/teachingAssistants';
 import {
@@ -27,6 +27,7 @@ import {
 } from '../utils/assignmentValidation';
 import type { RegistrationGrid } from '../utils/registrationUtils';
 import type { SlotOverrides } from '../utils/slotAccess';
+import { LoneShiftReport } from './LoneShiftReport';
 import { SheetsSyncPanel } from './SheetsSyncPanel';
 import { TaPicker } from './TaPicker';
 import { TaShiftSummary } from './TaShiftSummary';
@@ -40,6 +41,7 @@ interface Props {
   registrationGrid: RegistrationGrid;
   slotOverrides: SlotOverrides | undefined;
   scheduleSlots: ScheduleSlotsMap;
+  fixedTaMap: TeacherFixedTaMap;
   onRunSchedule: () => void;
   onClearAssignments: () => void;
   onUpdateAssignment: (shiftId: string, staffIds: string[]) => void;
@@ -242,6 +244,7 @@ export function ScheduleResultView({
   registrationGrid,
   slotOverrides,
   scheduleSlots,
+  fixedTaMap,
   onRunSchedule,
   onClearAssignments,
   onUpdateAssignment,
@@ -352,6 +355,15 @@ export function ScheduleResultView({
               </ul>
             </div>
           )}
+
+          <LoneShiftReport
+            assignments={result.assignments}
+            shifts={shifts}
+            roster={roster}
+            registrationGrid={registrationGrid}
+            slotOverrides={slotOverrides}
+            fixedTaMap={fixedTaMap}
+          />
 
           <div className="export-bar">
             <span className="export-label">Xuất lịch dạng bảng (giống Google Sheets):</span>
