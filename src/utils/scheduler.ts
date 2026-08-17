@@ -171,7 +171,6 @@ export function autoSchedule(
   const eligibleByShift = new Map<string, string[]>();
   const eligibleSetByShift = new Map<string, Set<string>>();
   const fixedByShift = new Map<string, string[]>();
-  const fixedShiftsByName = new Map<string, Set<string>>();
 
   for (const shift of shifts) {
     const interval = getShiftInterval(shift);
@@ -183,22 +182,7 @@ export function autoSchedule(
 
     const fixed = getFixedTasForShift(shift, fixedTaMap);
     fixedByShift.set(shift.id, fixed);
-    for (const name of fixed) {
-      const set = fixedShiftsByName.get(name);
-      if (set) set.add(shift.id);
-      else fixedShiftsByName.set(name, new Set([shift.id]));
-    }
   }
-
-  /** TG đã được giữ chỗ cho một ca cố định khác — không xếp tự do vào đây. */
-  const isReservedForOther = (name: string, shiftId: string): boolean => {
-    const set = fixedShiftsByName.get(name);
-    if (!set) return false;
-    for (const id of set) {
-      if (id !== shiftId) return true;
-    }
-    return false;
-  };
 
   // --- Ca nào có ca liền kề để nối, và TG nào nối được ---
   // TG chỉ đăng ký được khung rời rạc sẽ luôn bị lẻ dù xếp kiểu gì; phạt họ vì
@@ -233,6 +217,10 @@ export function autoSchedule(
   // --- Trạng thái đang xếp ---
   const assignedByShift = new Map<string, string[]>(shifts.map((s) => [s.id, []]));
   const intervalsByTa = new Map<string, ShiftInterval[]>();
+  /** TG cố định đã chốt — vòng tối ưu không được đổi/đẩy họ ra khỏi ca này. */
+  const lockedByShift = new Map<string, Set<string>>();
+  const isLocked = (shiftId: string, name: string) =>
+    lockedByShift.get(shiftId)?.has(name) === true;
 
   const listFor = (name: string): ShiftInterval[] => intervalsByTa.get(name) ?? [];
   const cost = (name: string, intervals: ShiftInterval[]): number =>
@@ -269,9 +257,6 @@ export function autoSchedule(
     }
   };
 
-  // Ca nào có quy tắc TG cố định thì chỉ dùng đúng những TG đó.
-  const isFixedOnly = (shiftId: string) => (fixedByShift.get(shiftId)?.length ?? 0) > 0;
-
   const sortedShifts = [...shifts].sort((a, b) => {
     const eligibleA = eligibleByShift.get(a.id)?.length ?? 0;
     const eligibleB = eligibleByShift.get(b.id)?.length ?? 0;
@@ -299,12 +284,14 @@ export function autoSchedule(
       if (assigned.includes(name)) continue;
       if (conflicts(name, interval)) continue;
       assign(shift.id, name);
+      const locked = lockedByShift.get(shift.id);
+      if (locked) locked.add(name);
+      else lockedByShift.set(shift.id, new Set([name]));
     }
   }
 
   // --- Bước 2: xếp các ca còn lại, ưu tiên TG có ca liền kề ---
   const fillShift = (shift: Shift) => {
-    if (isFixedOnly(shift.id)) return;
     const interval = intervalByShift.get(shift.id);
     if (!interval) return;
     const assigned = assignedByShift.get(shift.id) ?? [];
@@ -313,9 +300,7 @@ export function autoSchedule(
       const scored = (eligibleByShift.get(shift.id) ?? [])
         .filter(
           (name) =>
-            !assigned.includes(name) &&
-            !isReservedForOther(name, shift.id) &&
-            !conflicts(name, interval),
+            !assigned.includes(name) && !conflicts(name, interval),
         )
         .map((name) => {
           const load = listFor(name).length;
@@ -337,9 +322,7 @@ export function autoSchedule(
   }
 
   // --- Bước 3: tối ưu lại — đổi chỗ/thay người nếu giảm được độ rời rạc ---
-  const movableShifts = sortedShifts.filter(
-    (s) => !isFixedOnly(s.id) && intervalByShift.has(s.id),
-  );
+  const movableShifts = sortedShifts.filter((s) => intervalByShift.has(s.id));
 
   /** Danh sách ca của TG sau khi bỏ `removeShiftId` và thêm `add`. */
   const listAfterSwap = (name: string, removeShiftId: string, add: ShiftInterval) => [
@@ -349,7 +332,6 @@ export function autoSchedule(
 
   const canTake = (name: string, shift: Shift, interval: ShiftInterval, fromShiftId?: string) =>
     eligibleSetByShift.get(shift.id)?.has(name) === true &&
-    !isReservedForOther(name, shift.id) &&
     !assignedByShift.get(shift.id)?.includes(name) &&
     !conflicts(name, interval, fromShiftId);
 
@@ -372,6 +354,7 @@ export function autoSchedule(
           for (const nameB of [...listB]) {
             if (nameA === nameB) continue;
             if (!listA.includes(nameA) || !listB.includes(nameB)) continue;
+            if (isLocked(shiftA.id, nameA) || isLocked(shiftB.id, nameB)) continue;
             if (!canTake(nameA, shiftB, ivB, shiftA.id)) continue;
             if (!canTake(nameB, shiftA, ivA, shiftB.id)) continue;
 
@@ -398,6 +381,7 @@ export function autoSchedule(
 
       for (const current of [...assigned]) {
         if (!assigned.includes(current)) continue;
+        if (isLocked(shift.id, current)) continue;
         for (const alt of eligibleByShift.get(shift.id) ?? []) {
           if (alt === current) continue;
           if (!canTake(alt, shift, interval)) continue;

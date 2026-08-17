@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { Assignment, Shift, TeacherFixedTaMap } from '../types';
+import type { Assignment, Shift } from '../types';
 import type { TeachingAssistant } from '../data/teachingAssistants';
 import { DAY_LABELS, FACILITY_LABELS, LEVEL_LABELS } from '../data/constants';
 import {
@@ -17,7 +17,6 @@ interface Props {
   roster: TeachingAssistant[];
   registrationGrid: RegistrationGrid;
   slotOverrides: SlotOverrides | undefined;
-  fixedTaMap: TeacherFixedTaMap;
 }
 
 function describeShift(shift: Shift): string {
@@ -31,11 +30,10 @@ export function LoneShiftReport({
   roster,
   registrationGrid,
   slotOverrides,
-  fixedTaMap,
 }: Props) {
   const report = useMemo(
-    () => analyzeLoneShifts(assignments, shifts, registrationGrid, slotOverrides, fixedTaMap),
-    [assignments, shifts, registrationGrid, slotOverrides, fixedTaMap],
+    () => analyzeLoneShifts(assignments, shifts, registrationGrid, slotOverrides),
+    [assignments, shifts, registrationGrid, slotOverrides],
   );
 
   const fullNameOf = useMemo(() => {

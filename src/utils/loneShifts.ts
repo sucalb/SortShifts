@@ -1,5 +1,4 @@
-import type { Assignment, Shift, TeacherFixedTaMap } from '../types';
-import { getFixedTasForShift } from './fixedTa';
+import type { Assignment, Shift } from '../types';
 import {
   getEligibleNamesForShift,
   getRegisteredNamesForSlot,
@@ -19,14 +18,12 @@ import { getActiveRegistrationSlots } from './slotCatalog';
 export type LoneShiftReason =
   | 'no-registration'
   | 'no-adjacent-shift'
-  | 'adjacent-reserved'
   | 'adjacent-full'
   | 'adjacent-open';
 
 export const LONE_SHIFT_REASON_LABELS: Record<LoneShiftReason, string> = {
   'no-registration': 'TG không đăng ký khung liền kề',
   'no-adjacent-shift': 'Khung liền kề không có lớp nào',
-  'adjacent-reserved': 'Ca liền kề dành cho TG cố định',
   'adjacent-full': 'Ca liền kề đã đủ người',
   'adjacent-open': 'Ca liền kề còn trống — có thể ghép thêm',
 };
@@ -64,7 +61,6 @@ export function analyzeLoneShifts(
   shifts: Shift[],
   registrationGrid: RegistrationGrid | undefined,
   slotOverrides?: SlotOverrides,
-  fixedTaMap: TeacherFixedTaMap = {},
   gapMinutes: number = DEFAULT_ADJACENT_GAP_MINUTES,
 ): LoneShiftReport {
   const shiftById = new Map(shifts.map((s) => [s.id, s]));
@@ -81,7 +77,6 @@ export function analyzeLoneShifts(
   }
 
   const eligibleByShift = new Map<string, Set<string>>();
-  const fixedShiftsByName = new Map<string, Set<string>>();
   const filledByShift = new Map<string, number>();
 
   for (const shift of shifts) {
@@ -89,11 +84,6 @@ export function analyzeLoneShifts(
       shift.id,
       new Set(getEligibleNamesForShift(shift, registrationGrid, slotOverrides)),
     );
-    for (const name of getFixedTasForShift(shift, fixedTaMap)) {
-      const set = fixedShiftsByName.get(name);
-      if (set) set.add(shift.id);
-      else fixedShiftsByName.set(name, new Set([shift.id]));
-    }
   }
 
   const intervalsByTa = new Map<string, ShiftInterval[]>();
@@ -107,16 +97,6 @@ export function analyzeLoneShifts(
       else intervalsByTa.set(name, [interval]);
     }
   }
-
-  /** TG bị giữ chỗ cho một ca cố định khác thì không thể ghép vào ca này. */
-  const isReservedForOther = (name: string, shiftId: string): boolean => {
-    const set = fixedShiftsByName.get(name);
-    if (!set) return false;
-    for (const id of set) {
-      if (id !== shiftId) return true;
-    }
-    return false;
-  };
 
   const registrationSlots = getActiveRegistrationSlots();
 
@@ -159,20 +139,9 @@ export function analyzeLoneShifts(
           : 'no-registration';
       } else {
         const openShifts = adjacentShifts.filter(
-          (other) =>
-            (filledByShift.get(other.id) ?? 0) < other.staffNeeded &&
-            !isReservedForOther(name, other.id) &&
-            getFixedTasForShift(other, fixedTaMap).length === 0,
+          (other) => (filledByShift.get(other.id) ?? 0) < other.staffNeeded,
         );
-        const allowedShifts = adjacentShifts.filter(
-          (other) =>
-            !isReservedForOther(name, other.id) &&
-            getFixedTasForShift(other, fixedTaMap).length === 0,
-        );
-
-        if (openShifts.length > 0) reason = 'adjacent-open';
-        else if (allowedShifts.length > 0) reason = 'adjacent-full';
-        else reason = 'adjacent-reserved';
+        reason = openShifts.length > 0 ? 'adjacent-open' : 'adjacent-full';
       }
 
       entries.push({ name, shift, reason, adjacentShifts });

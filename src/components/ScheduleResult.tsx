@@ -1,4 +1,4 @@
-import type { Assignment, Shift, TeacherFixedTaMap } from '../types';
+import type { Assignment, Shift } from '../types';
 import { useState } from 'react';
 import type { TeachingAssistant } from '../data/teachingAssistants';
 import {
@@ -41,7 +41,6 @@ interface Props {
   registrationGrid: RegistrationGrid;
   slotOverrides: SlotOverrides | undefined;
   scheduleSlots: ScheduleSlotsMap;
-  fixedTaMap: TeacherFixedTaMap;
   onRunSchedule: () => void;
   onClearAssignments: () => void;
   onUpdateAssignment: (shiftId: string, staffIds: string[]) => void;
@@ -244,7 +243,6 @@ export function ScheduleResultView({
   registrationGrid,
   slotOverrides,
   scheduleSlots,
-  fixedTaMap,
   onRunSchedule,
   onClearAssignments,
   onUpdateAssignment,
@@ -362,7 +360,6 @@ export function ScheduleResultView({
             roster={roster}
             registrationGrid={registrationGrid}
             slotOverrides={slotOverrides}
-            fixedTaMap={fixedTaMap}
           />
 
           <div className="export-bar">

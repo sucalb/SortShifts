@@ -36,8 +36,24 @@ check('slot lạ', autoSchedule([shift('a',0,'xx')], emptyGrid()).assignments.le
 { const g = emptyGrid(); g[0]!['reg-5']='A, C'; g[0]!['reg-6']='A, C';
   const ss = [shift('free',0,'cs1c3-5'), shift('fixed',0,'cs1c3-6',{teacher:'GV1'})];
   const r = autoSchedule(ss, g, undefined, { GV1:['C'] });
-  check('ca cố định giữ C', r.assignments.find(a=>a.shiftId==='fixed')?.staffIds[0] === 'C');
-  check('ca tự do lấy A', r.assignments.find(a=>a.shiftId==='free')?.staffIds[0] === 'A'); }
+  check('ca cố định giữ C', r.assignments.find(a=>a.shiftId==='fixed')?.staffIds[0] === 'C'); }
+{ // TG cố định KHÔNG còn bị cấm nhận ca tự do khác
+  const g = emptyGrid(); g[0]!['reg-5']='C'; g[0]!['reg-6']='C';
+  const ss = [shift('free',0,'cs1c3-5'), shift('fixed',0,'cs1c3-6',{teacher:'GV1'})];
+  const r = autoSchedule(ss, g, undefined, { GV1:['C'] });
+  check('TG cố định vẫn nhận được ca tự do', r.stats.totalSlotsFilled === 2, String(r.stats.totalSlotsFilled)); }
+{ // Ca cố định thiếu người thì người khác vẫn được điền vào
+  const g = emptyGrid(); g[0]!['reg-6']='A, C';
+  const ss = [shift('fixed',0,'cs1c3-6',{teacher:'GV1', staffNeeded:2})];
+  const r = autoSchedule(ss, g, undefined, { GV1:['C'] });
+  const who = r.assignments[0]?.staffIds ?? [];
+  check('ca cố định được điền thêm người', who.length === 2 && who.includes('C') && who.includes('A'), JSON.stringify(who)); }
+{ // TG cố định không bị vòng tối ưu đẩy ra khỏi ca của mình
+  const g = emptyGrid(); g[0]!['reg-5']='A, B, C'; g[0]!['reg-6']='A, B, C';
+  const ss = [shift('fixed',0,'cs1c3-5',{teacher:'GV1'}), shift('free',0,'cs1c3-6')];
+  const r = autoSchedule(ss, g, undefined, { GV1:['C'] });
+  check('TG cố định vẫn ở nguyên ca', r.assignments.find(a=>a.shiftId==='fixed')?.staffIds.includes('C') === true,
+        JSON.stringify(r.assignments)); }
 
 console.log('\n--- Nối ca liền nhau ---');
 { const g = emptyGrid(); g[0]!['reg-5']='A, B'; g[0]!['reg-6']='A, B';

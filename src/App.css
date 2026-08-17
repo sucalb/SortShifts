@@ -2459,8 +2459,7 @@ html {
   background: var(--accent-green);
 }
 
-.lone-shift-reason--adjacent-full,
-.lone-shift-reason--adjacent-reserved {
+.lone-shift-reason--adjacent-full {
   background: var(--accent-red);
 }
 

@@ -482,7 +482,6 @@ export function AdminApp() {
                 registrationGrid={registrationGrid}
                 slotOverrides={slotOverrides}
                 scheduleSlots={scheduleSlots}
-                fixedTaMap={fixedTaMap}
                 onRunSchedule={handleRunSchedule}
                 onClearAssignments={() => setScheduleResult(null)}
                 onUpdateAssignment={handleUpdateAssignment}
