@@ -77,18 +77,26 @@ export function groupIntoBlocks(intervals: ShiftInterval[], gapMinutes: number):
 /**
  * Chi phí lịch của một TG: càng nhiều cụm rời, càng nhiều ca lẻ và giờ trống
  * thì càng cao. Bộ xếp lịch tìm cách hạ tổng chi phí này xuống.
+ *
+ * `canChain` cho biết ca đó có ca liền kề nào mà TG này đủ điều kiện làm không.
+ * Ca không thể nối thì bị lẻ là chuyện bắt buộc, không phải lỗi của cách xếp —
+ * tính phạt vào đó sẽ khiến TG chỉ đăng ký được khung rời rạc thua mọi ca có
+ * cạnh tranh, nên những ca như vậy được miễn phạt.
  */
 export function taFragmentationCost(
   intervals: ShiftInterval[],
   weights: ContiguityWeights,
   gapMinutes: number,
+  canChain?: (interval: ShiftInterval) => boolean,
 ): number {
   let cost = weights.loadBalance * intervals.length * intervals.length;
 
   const blocks = groupIntoBlocks(intervals, gapMinutes);
   for (let i = 0; i < blocks.length; i++) {
     const block = blocks[i];
-    if (block.intervals.length === 1) cost += weights.loneBlock;
+    if (block.intervals.length === 1 && (!canChain || canChain(block.intervals[0]))) {
+      cost += weights.loneBlock;
+    }
 
     const prev = blocks[i - 1];
     if (prev && prev.day === block.day) {

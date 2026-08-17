@@ -8,6 +8,7 @@ import {
   DEFAULT_CONTIGUITY_WEIGHTS,
   getShiftInterval,
   intervalsConflict,
+  isAdjacentRange,
   taFragmentationCost,
 } from './shiftContiguity';
 import type { SlotOverrides } from './slotAccess';
@@ -199,17 +200,50 @@ export function autoSchedule(
     return false;
   };
 
+  // --- Ca nào có ca liền kề để nối, và TG nào nối được ---
+  // TG chỉ đăng ký được khung rời rạc sẽ luôn bị lẻ dù xếp kiểu gì; phạt họ vì
+  // điều đó khiến họ thua mọi ca có cạnh tranh và bị xếp rất ít ca.
+  const adjacentShiftIds = new Map<string, string[]>();
+  for (const shift of shifts) {
+    const interval = intervalByShift.get(shift.id);
+    if (!interval) continue;
+    const neighbours: string[] = [];
+    for (const other of shifts) {
+      if (other.id === shift.id) continue;
+      if (other.day !== shift.day) continue;
+      const otherInterval = intervalByShift.get(other.id);
+      if (!otherInterval) continue;
+      if (isAdjacentRange(otherInterval, interval, adjacentGapMinutes)) neighbours.push(other.id);
+    }
+    adjacentShiftIds.set(shift.id, neighbours);
+  }
+
+  const chainableCache = new Map<string, boolean>();
+  const canChainAt = (name: string, shiftId: string): boolean => {
+    const key = name + '\u0000' + shiftId;
+    const cached = chainableCache.get(key);
+    if (cached !== undefined) return cached;
+    const result = (adjacentShiftIds.get(shiftId) ?? []).some(
+      (id) => eligibleSetByShift.get(id)?.has(name) === true,
+    );
+    chainableCache.set(key, result);
+    return result;
+  };
+
   // --- Trạng thái đang xếp ---
   const assignedByShift = new Map<string, string[]>(shifts.map((s) => [s.id, []]));
   const intervalsByTa = new Map<string, ShiftInterval[]>();
 
   const listFor = (name: string): ShiftInterval[] => intervalsByTa.get(name) ?? [];
-  const cost = (intervals: ShiftInterval[]): number =>
-    taFragmentationCost(intervals, weights, adjacentGapMinutes);
+  const cost = (name: string, intervals: ShiftInterval[]): number =>
+    taFragmentationCost(intervals, weights, adjacentGapMinutes, (iv) =>
+      canChainAt(name, iv.shiftId),
+    );
+  const costOf = (name: string): number => cost(name, listFor(name));
   const costWithout = (name: string, shiftId: string): number =>
-    cost(listFor(name).filter((iv) => iv.shiftId !== shiftId));
+    cost(name, listFor(name).filter((iv) => iv.shiftId !== shiftId));
   const costWith = (name: string, interval: ShiftInterval): number =>
-    cost([...listFor(name), interval]);
+    cost(name, [...listFor(name), interval]);
   const conflicts = (name: string, interval: ShiftInterval, excludeShiftId?: string): boolean =>
     intervalsConflict(listFor(name), interval, excludeShiftId);
 
@@ -285,7 +319,7 @@ export function autoSchedule(
         )
         .map((name) => {
           const load = listFor(name).length;
-          const delta = preferContiguous ? costWith(name, interval) - cost(listFor(name)) : load;
+          const delta = preferContiguous ? costWith(name, interval) - costOf(name) : load;
           return { name, delta, load };
         })
         .sort(
@@ -341,10 +375,10 @@ export function autoSchedule(
             if (!canTake(nameA, shiftB, ivB, shiftA.id)) continue;
             if (!canTake(nameB, shiftA, ivA, shiftB.id)) continue;
 
-            const before = cost(listFor(nameA)) + cost(listFor(nameB));
+            const before = costOf(nameA) + costOf(nameB);
             const after =
-              cost(listAfterSwap(nameA, shiftA.id, ivB)) +
-              cost(listAfterSwap(nameB, shiftB.id, ivA));
+              cost(nameA, listAfterSwap(nameA, shiftA.id, ivB)) +
+              cost(nameB, listAfterSwap(nameB, shiftB.id, ivA));
             if (after >= before - EPS) continue;
 
             unassign(shiftA.id, nameA);
@@ -368,7 +402,7 @@ export function autoSchedule(
           if (alt === current) continue;
           if (!canTake(alt, shift, interval)) continue;
 
-          const before = cost(listFor(current)) + cost(listFor(alt));
+          const before = costOf(current) + costOf(alt);
           const after = costWithout(current, shift.id) + costWith(alt, interval);
           if (after >= before - EPS) continue;
 
