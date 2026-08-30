@@ -122,19 +122,15 @@ console.log('\n--- Cơ sở & cấp ---');
   check('cùng cấp rẻ hơn đổi cấp',
         taFragmentationCost([a,bSame], w, 30) < taFragmentationCost([a,bDiff], w, 30)); }
 
-{ // Ràng buộc cứng: không kịp đi giữa 2 cơ sở thì không được xếp cả hai
-  const g = emptyGrid(); g[0]!['reg-5']='A'; g[0]!['reg-6']='A';
+{ // Hết cách thì vẫn phải xếp — chạy giữa 2 cơ sở là bất khả kháng
+  const g = emptyGrid(); g[0]!['reg-5']='A'; g[0]!['reg-6']='A';  // chỉ có A
   const ss = [
     shift('cs1',0,'cs1c3-5'),                                    // 17-19 CS1
     { ...shift('cs2',0,'cs2c3-2'), facility:'coso2' as const },  // 19-21 CS2
   ];
   const r = autoSchedule(ss,g);
-  check('không xếp 1 người cho 2 CS sát giờ', r.stats.totalSlotsFilled === 1,
-        JSON.stringify(r.assignments));
-  // tắt ràng buộc thì lại xếp được cả hai
-  const r2 = autoSchedule(ss,g,undefined,{},{ travelMinutes: 0 });
-  check('tắt travelMinutes thì xếp cả hai', r2.stats.totalSlotsFilled === 2,
-        String(r2.stats.totalSlotsFilled)); }
+  check('không còn ai khác thì vẫn lấp đủ', r.stats.totalSlotsFilled === 2,
+        JSON.stringify(r.assignments)); }
 
 console.log('\n--- TG cố định luôn được điền tên ---');
 { const g = emptyGrid(); g[0]!['reg-5']='A';   // C KHÔNG đăng ký

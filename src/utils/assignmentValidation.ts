@@ -6,7 +6,7 @@ import { getShiftInterval, needsTravelGap, DEFAULT_TRAVEL_MINUTES } from './shif
 import { getShiftTimeSlot, shiftsConflict } from './timeUtils';
 
 export interface AssignmentWarning {
-  type: 'conflict' | 'not_registered' | 'over_capacity';
+  type: 'conflict' | 'not_registered' | 'over_capacity' | 'travel';
   message: string;
 }
 
@@ -83,7 +83,9 @@ export function getAssignmentWarnings(
     const travelClash = getTravelClashShift(name, shift, allAssignments, shifts, shift.id);
     if (travelClash) {
       warnings.push({
-        type: 'conflict',
+        // Không chặn: có ca phải chạy giữa hai cơ sở là chuyện bất khả kháng
+        // khi không còn ai khác xếp được.
+        type: 'travel',
         message: `${name}: không kịp đi từ ${FACILITY_LABELS[travelClash.facility]} (${getShiftTimeSlot(travelClash)?.label ?? ''}) sang ${FACILITY_LABELS[shift.facility]}`,
       });
     }

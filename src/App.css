@@ -2469,3 +2469,7 @@ html {
   font-size: 0.72rem;
   color: var(--text-muted);
 }
+
+.assignment-warnings .warn-travel {
+  color: var(--text-muted);
+}

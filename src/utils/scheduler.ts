@@ -6,11 +6,9 @@ import type { ContiguityWeights, ShiftInterval } from './shiftContiguity';
 import {
   DEFAULT_ADJACENT_GAP_MINUTES,
   DEFAULT_CONTIGUITY_WEIGHTS,
-  DEFAULT_TRAVEL_MINUTES,
   getShiftInterval,
   intervalsConflict,
   isAdjacentRange,
-  needsTravelGap,
   taFragmentationCost,
 } from './shiftContiguity';
 import type { SlotOverrides } from './slotAccess';
@@ -150,8 +148,6 @@ export interface AutoScheduleOptions {
   weights?: Partial<ContiguityWeights>;
   /** Số vòng tối ưu lại sau khi xếp lần đầu */
   maxImprovePasses?: number;
-  /** Thời gian tối thiểu (phút) để đi giữa hai cơ sở; 0 để tắt ràng buộc */
-  travelMinutes?: number;
 }
 
 const EPS = 1e-9;
@@ -167,7 +163,6 @@ export function autoSchedule(
     preferContiguous = true,
     adjacentGapMinutes = DEFAULT_ADJACENT_GAP_MINUTES,
     maxImprovePasses = 6,
-    travelMinutes = DEFAULT_TRAVEL_MINUTES,
   } = options;
   const weights: ContiguityWeights = { ...DEFAULT_CONTIGUITY_WEIGHTS, ...options.weights };
 
@@ -239,17 +234,8 @@ export function autoSchedule(
     cost(name, listFor(name).filter((iv) => iv.shiftId !== shiftId));
   const costWith = (name: string, interval: ShiftInterval): number =>
     cost(name, [...listFor(name), interval]);
-  const conflicts = (name: string, interval: ShiftInterval, excludeShiftId?: string): boolean => {
-    const list = listFor(name);
-    if (intervalsConflict(list, interval, excludeShiftId)) return true;
-    if (travelMinutes <= 0) return false;
-    return list.some(
-      (iv) =>
-        iv.shiftId !== excludeShiftId &&
-        iv.shiftId !== interval.shiftId &&
-        needsTravelGap(iv, interval, travelMinutes),
-    );
-  };
+  const conflicts = (name: string, interval: ShiftInterval, excludeShiftId?: string): boolean =>
+    intervalsConflict(listFor(name), interval, excludeShiftId);
 
   const assign = (shiftId: string, name: string) => {
     const interval = intervalByShift.get(shiftId);
