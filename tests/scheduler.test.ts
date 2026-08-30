@@ -94,6 +94,19 @@ console.log('\n--- Miễn phạt khi không thể nối (T.Phú/Quân) ---');
   check('B nối được cặp liền nhau', who('muon') === 'B' && (who('som1') === 'B' || who('som2') === 'B'), JSON.stringify(all));
   check('lấp đủ cả 3', r.stats.totalSlotsFilled === 3, String(r.stats.totalSlotsFilled)); }
 
+{ // 3 TG cùng rảnh 2 khung liền ở 2 ngày -> phải ra 2 cặp liền, không ai lẻ
+  const g = emptyGrid();
+  for (const d of [0,1] as DayOfWeek[]) { g[d]!['reg-5']='QUANG, KHAI, HLONG'; g[d]!['reg-6']='QUANG, KHAI, HLONG'; }
+  const mk = (id: string, day: DayOfWeek, slot: string, need: number): Shift =>
+    ({ id, facility:'coso1', level:'cap2', day, timeSlotId:slot, className:id, staffNeeded:need });
+  const ss = [mk('t2a',0,'cs1c2-4',1), mk('t2b',0,'cs1c2-5',1),
+              mk('t3a',1,'cs1c2-4',2), mk('t3b',1,'cs1c2-5',2)];
+  const r = autoSchedule(ss,g);
+  const at = (id: string) => (r.assignments.find(a=>a.shiftId===id)?.staffIds ?? []).slice().sort().join(',');
+  check('lấp đủ 6 slot', r.stats.totalSlotsFilled === 6, String(r.stats.totalSlotsFilled));
+  check('T2 hai ca cùng người', at('t2a') === at('t2b'), `${at('t2a')} / ${at('t2b')}`);
+  check('T3 hai ca cùng cặp người', at('t3a') === at('t3b'), `${at('t3a')} / ${at('t3b')}`); }
+
 console.log('\n--- Cơ sở & cấp ---');
 { // 17-19 CS1 và 19-21 CS2 sát giờ nhưng khác cơ sở -> phải chia 2 người
   const g = emptyGrid(); g[0]!['reg-5']='A, B'; g[0]!['reg-6']='A, B';
