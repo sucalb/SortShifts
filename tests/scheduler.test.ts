@@ -72,8 +72,10 @@ console.log('\n--- Nối ca liền nhau ---');
 
 console.log('\n--- Miễn phạt khi không thể nối (T.Phú/Quân) ---');
 { // Phạt "ca lẻ" phải được miễn khi TG không có ca nào để nối
-  const iv = { shiftId:'s', day:0 as DayOfWeek, start:1020, end:1140 };
-  const w = { extraBlock:12, loneBlock:8, idleHour:1.5, loadBalance:0 };
+  const iv = { shiftId:'s', day:0 as DayOfWeek, start:1020, end:1140,
+               facility:'coso1' as const, level:'cap3' as const };
+  const w = { extraBlock:12, loneBlock:8, idleHour:1.5, loadBalance:0,
+              facilitySwitch:20, levelSwitch:2 };
   const coPhat = taFragmentationCost([iv], w, 30, () => true);
   const mienPhat = taFragmentationCost([iv], w, 30, () => false);
   check('nối được -> chịu phạt ca lẻ', coPhat === 8, String(coPhat));
@@ -91,6 +93,63 @@ console.log('\n--- Miễn phạt khi không thể nối (T.Phú/Quân) ---');
   check('A không bị bỏ trắng', all.includes('A'), JSON.stringify(all));
   check('B nối được cặp liền nhau', who('muon') === 'B' && (who('som1') === 'B' || who('som2') === 'B'), JSON.stringify(all));
   check('lấp đủ cả 3', r.stats.totalSlotsFilled === 3, String(r.stats.totalSlotsFilled)); }
+
+console.log('\n--- Cơ sở & cấp ---');
+{ // 17-19 CS1 và 19-21 CS2 sát giờ nhưng khác cơ sở -> phải chia 2 người
+  const g = emptyGrid(); g[0]!['reg-5']='A, B'; g[0]!['reg-6']='A, B';
+  const ss = [
+    shift('cs1',0,'cs1c3-5'),
+    { ...shift('cs2',0,'cs2c3-2'), facility:'coso2' as const },
+  ];
+  const r = autoSchedule(ss,g);
+  const w = ss.map(x => r.assignments.find(a=>a.shiftId===x.id)?.staffIds[0]);
+  check('không bắt chạy giữa 2 cơ sở', w[0] !== w[1], JSON.stringify(w));
+  check('vẫn lấp đủ', r.stats.totalSlotsFilled === 2); }
+{ // Phạt đổi cơ sở phải nặng hơn việc tách thành 2 cụm
+  const w = { extraBlock:12, loneBlock:8, idleHour:1.5, loadBalance:0, facilitySwitch:20, levelSwitch:2 };
+  const cs1a = { shiftId:'a', day:0 as DayOfWeek, start:1020, end:1140, facility:'coso1' as const, level:'cap3' as const };
+  const cs1b = { shiftId:'b', day:0 as DayOfWeek, start:1140, end:1260, facility:'coso1' as const, level:'cap3' as const };
+  const cs2b = { shiftId:'b', day:0 as DayOfWeek, start:1140, end:1260, facility:'coso2' as const, level:'cap3' as const };
+  const cungCoSo = taFragmentationCost([cs1a, cs1b], w, 30);
+  const khacCoSo = taFragmentationCost([cs1a, cs2b], w, 30);
+  check('cùng cơ sở nối liền = 0 phạt', cungCoSo === 0, String(cungCoSo));
+  check('khác cơ sở bị phạt nặng', khacCoSo >= 32, String(khacCoSo)); }
+{ // Đổi cấp trong cùng cụm bị phạt nhẹ
+  const w = { extraBlock:12, loneBlock:8, idleHour:1.5, loadBalance:0, facilitySwitch:20, levelSwitch:2 };
+  const a = { shiftId:'a', day:0 as DayOfWeek, start:1020, end:1140, facility:'coso1' as const, level:'cap3' as const };
+  const bSame = { shiftId:'b', day:0 as DayOfWeek, start:1140, end:1260, facility:'coso1' as const, level:'cap3' as const };
+  const bDiff = { shiftId:'b', day:0 as DayOfWeek, start:1140, end:1260, facility:'coso1' as const, level:'cap2' as const };
+  check('cùng cấp rẻ hơn đổi cấp',
+        taFragmentationCost([a,bSame], w, 30) < taFragmentationCost([a,bDiff], w, 30)); }
+
+{ // Ràng buộc cứng: không kịp đi giữa 2 cơ sở thì không được xếp cả hai
+  const g = emptyGrid(); g[0]!['reg-5']='A'; g[0]!['reg-6']='A';
+  const ss = [
+    shift('cs1',0,'cs1c3-5'),                                    // 17-19 CS1
+    { ...shift('cs2',0,'cs2c3-2'), facility:'coso2' as const },  // 19-21 CS2
+  ];
+  const r = autoSchedule(ss,g);
+  check('không xếp 1 người cho 2 CS sát giờ', r.stats.totalSlotsFilled === 1,
+        JSON.stringify(r.assignments));
+  // tắt ràng buộc thì lại xếp được cả hai
+  const r2 = autoSchedule(ss,g,undefined,{},{ travelMinutes: 0 });
+  check('tắt travelMinutes thì xếp cả hai', r2.stats.totalSlotsFilled === 2,
+        String(r2.stats.totalSlotsFilled)); }
+
+console.log('\n--- TG cố định luôn được điền tên ---');
+{ const g = emptyGrid(); g[0]!['reg-5']='A';   // C KHÔNG đăng ký
+  const ss = [shift('f',0,'cs1c3-5',{teacher:'GV1'})];
+  const r = autoSchedule(ss, g, undefined, { GV1:['C'] });
+  check('điền TG cố định dù chưa đăng ký',
+        r.assignments.find(a=>a.shiftId==='f')?.staffIds[0] === 'C',
+        JSON.stringify(r.assignments)); }
+{ // Nhưng vẫn không được xếp trùng giờ
+  const g = emptyGrid();
+  const ss = [shift('f1',0,'cs1c3-5',{teacher:'GV1'}),
+              { ...shift('f2',0,'cs1c3-5',{teacher:'GV1'}), id:'f2', className:'f2' }];
+  const r = autoSchedule(ss, g, undefined, { GV1:['C'] });
+  check('TG cố định không bị xếp trùng giờ', r.stats.totalSlotsFilled === 1,
+        JSON.stringify(r.assignments)); }
 
 console.log('\n--- Báo cáo ca lẻ ---');
 { const g = emptyGrid(); g[0]!['reg-5']='A'; g[0]!['reg-6']='A';

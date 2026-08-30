@@ -126,6 +126,8 @@ export function analyzeLoneShifts(
       // Các ca sát giờ mà TG này đủ điều kiện làm.
       const adjacentShifts = (shiftsByDay.get(shift.day) ?? []).filter((other) => {
         if (other.id === shift.id) return false;
+        // Khác cơ sở thì phải di chuyển — không coi là ghép được
+        if (other.facility !== shift.facility) return false;
         const otherInterval = intervalByShift.get(other.id);
         if (!otherInterval) return false;
         if (!isAdjacentRange(otherInterval, interval, gapMinutes)) return false;

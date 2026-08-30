@@ -1,4 +1,4 @@
-import type { DayOfWeek, Shift } from '../types';
+import type { DayOfWeek, Facility, Level, Shift } from '../types';
 import { getShiftTimeSlot } from './timeUtils';
 
 /** Một ca đã xếp, quy về khoảng thời gian trong ngày. */
@@ -7,10 +7,15 @@ export interface ShiftInterval {
   day: DayOfWeek;
   start: number;
   end: number;
+  facility: Facility;
+  level: Level;
 }
 
 /** Khoảng nghỉ tối đa (phút) vẫn coi 2 ca là liền nhau. */
 export const DEFAULT_ADJACENT_GAP_MINUTES = 30;
+
+/** Thời gian tối thiểu (phút) để đi từ cơ sở này sang cơ sở kia. */
+export const DEFAULT_TRAVEL_MINUTES = 30;
 
 export interface ContiguityWeights {
   /** Phạt mỗi cụm ca rời thêm trong cùng một ngày */
@@ -21,6 +26,10 @@ export interface ContiguityWeights {
   idleHour: number;
   /** Phạt lồi theo tổng số ca — giữ cân bằng tải giữa các TG */
   loadBalance: number;
+  /** Phạt mỗi lần phải đổi cơ sở trong cùng một ngày — có di chuyển thật */
+  facilitySwitch: number;
+  /** Phạt mỗi lần đổi cấp giữa hai ca liền nhau — nhẹ, chỉ để chọn khi ngang điểm */
+  levelSwitch: number;
 }
 
 export const DEFAULT_CONTIGUITY_WEIGHTS: ContiguityWeights = {
@@ -29,12 +38,22 @@ export const DEFAULT_CONTIGUITY_WEIGHTS: ContiguityWeights = {
   idleHour: 1.5,
   // Đủ lớn để không dồn ca vào một nhóm nhỏ, đủ nhỏ để vẫn ưu tiên nối ca.
   loadBalance: 3,
+  // Nặng hơn cả một cụm rời: thà tách ca còn hơn bắt chạy giữa hai cơ sở.
+  facilitySwitch: 20,
+  levelSwitch: 2,
 };
 
 export function getShiftInterval(shift: Shift): ShiftInterval | null {
   const slot = getShiftTimeSlot(shift);
   if (!slot) return null;
-  return { shiftId: shift.id, day: shift.day, start: slot.start, end: slot.end };
+  return {
+    shiftId: shift.id,
+    day: shift.day,
+    start: slot.start,
+    end: slot.end,
+    facility: shift.facility,
+    level: shift.level,
+  };
 }
 
 /** Một chuỗi ca liền nhau của cùng một TG trong cùng một ngày. */
@@ -42,6 +61,8 @@ export interface ShiftBlock {
   day: DayOfWeek;
   start: number;
   end: number;
+  /** Cụm chỉ gồm ca cùng một cơ sở — đổi cơ sở là cắt cụm */
+  facility: Facility;
   intervals: ShiftInterval[];
 }
 
@@ -64,12 +85,23 @@ export function groupIntoBlocks(intervals: ShiftInterval[], gapMinutes: number):
   const blocks: ShiftBlock[] = [];
   for (const iv of sorted) {
     const last = blocks[blocks.length - 1];
-    if (last && last.day === iv.day && iv.start - last.end <= gapMinutes) {
+    if (
+      last &&
+      last.day === iv.day &&
+      last.facility === iv.facility &&
+      iv.start - last.end <= gapMinutes
+    ) {
       last.end = Math.max(last.end, iv.end);
       last.intervals.push(iv);
       continue;
     }
-    blocks.push({ day: iv.day, start: iv.start, end: iv.end, intervals: [iv] });
+    blocks.push({
+      day: iv.day,
+      start: iv.start,
+      end: iv.end,
+      facility: iv.facility,
+      intervals: [iv],
+    });
   }
   return blocks;
 }
@@ -98,14 +130,38 @@ export function taFragmentationCost(
       cost += weights.loneBlock;
     }
 
+    // Đổi cấp giữa hai ca liền nhau trong cùng cụm
+    for (let j = 1; j < block.intervals.length; j++) {
+      if (block.intervals[j].level !== block.intervals[j - 1].level) {
+        cost += weights.levelSwitch;
+      }
+    }
+
     const prev = blocks[i - 1];
     if (prev && prev.day === block.day) {
       cost += weights.extraBlock;
       cost += (weights.idleHour * (block.start - prev.end)) / 60;
+      if (prev.facility !== block.facility) cost += weights.facilitySwitch;
     }
   }
 
   return cost;
+}
+
+/**
+ * Hai ca ở hai cơ sở khác nhau, cùng ngày, mà không đủ thời gian đi lại.
+ * Đây là ràng buộc cứng chứ không phải điểm trừ: không ai kết thúc 19:00 ở
+ * cơ sở này rồi có mặt lúc 19:00 ở cơ sở kia.
+ */
+export function needsTravelGap(
+  a: ShiftInterval,
+  b: ShiftInterval,
+  travelMinutes: number,
+): boolean {
+  if (a.day !== b.day) return false;
+  if (a.facility === b.facility) return false;
+  const gap = a.start >= b.end ? a.start - b.end : b.start - a.end;
+  return gap < travelMinutes;
 }
 
 /** Ca `target` có đè lên ca nào đang có của TG không (bỏ qua ca `excludeShiftId`). */
