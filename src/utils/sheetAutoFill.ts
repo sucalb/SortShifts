@@ -7,8 +7,11 @@ import {
   countTemplateCells,
   fillFromSheetGrid,
   pullAssignmentsFromSheetGrid,
+  scanShiftsFromSheetGrid,
   validateSheetGrid,
 } from './csvTemplateFill';
+import { buildScheduleFromSheetGrid, type ImportedSchedule } from './sheetShiftImport';
+import type { ScheduleSlotsMap } from './slotCatalog';
 import { buildClassColorMap } from './classColors';
 import { fetchSheetGrid, weekTabHintFromStart } from './sheetsSync';
 
@@ -159,4 +162,26 @@ export async function syncScheduleFromSheet(
     missSamples: pull.missSamples,
     classColors,
   };
+}
+
+/** Đọc cấu trúc ca (lớp, GV, khung giờ) từ Sheet về app — chiều Sheet → Cấu hình ca. */
+export async function syncShiftsFromSheet(
+  webhookUrl: string,
+  weekStart: string,
+  existingShifts: Shift[],
+  existingScheduleSlots: ScheduleSlotsMap,
+): Promise<ImportedSchedule & { tab: string }> {
+  const weekTabHint = weekTabHintFromStart(weekStart);
+  const scanned = await fetchSheetGrid(webhookUrl, weekTabHint);
+  gridCache.set(`${webhookUrl.trim()}|${weekTabHint}`, scanned.grid);
+
+  const scan = scanShiftsFromSheetGrid(scanned.grid);
+  if (scan.shifts.length === 0) {
+    throw new Error(
+      `Không đọc được ca nào từ tab ${scanned.tab}. Kiểm tra tab tuần có đủ vùng CƠ SỞ 1 / CƠ SỞ 2.`,
+    );
+  }
+
+  const built = buildScheduleFromSheetGrid(scan, existingShifts, existingScheduleSlots);
+  return { ...built, tab: scanned.tab };
 }

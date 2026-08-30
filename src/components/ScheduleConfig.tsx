@@ -8,7 +8,7 @@ import {
   getWeekDates,
 } from '../data/constants';
 import { resolveClassColor } from '../utils/classColors';
-import { syncClassColorsFromSheet } from '../utils/sheetAutoFill';
+import { syncClassColorsFromSheet, syncShiftsFromSheet } from '../utils/sheetAutoFill';
 import type { TeachingAssistant } from '../data/teachingAssistants';
 import type { ScheduleSlotsMap } from '../utils/slotCatalog';
 import { getScheduleSlotsForKey } from '../utils/slotCatalog';
@@ -31,6 +31,7 @@ interface Props {
   onAddShift: (shift: Omit<Shift, 'id'>) => void;
   onRemoveShift: (shiftId: string) => void;
   onWeekStartChange: (date: string) => void;
+  onImportSchedule: (shifts: Shift[], scheduleSlots: ScheduleSlotsMap) => void;
   onUpdateScheduleSlots: (key: string, slots: TimeSlot[]) => void;
   onRemoveScheduleSlot: (key: string, slotId: string) => void;
 }
@@ -308,6 +309,7 @@ export function ScheduleConfig({
   onAddShift,
   onRemoveShift,
   onWeekStartChange,
+  onImportSchedule,
   onUpdateScheduleSlots,
   onRemoveScheduleSlot,
 }: Props) {
@@ -320,6 +322,43 @@ export function ScheduleConfig({
     { facility: 'coso1', levels: ['cap3', 'cap2', 'cap1'] },
     { facility: 'coso2', levels: ['cap3', 'cap2', 'cap1'] },
   ];
+
+  const [syncingShifts, setSyncingShifts] = useState(false);
+
+  const handleSyncShifts = async () => {
+    if (!webhookUrl.trim()) {
+      setColorMsg({ type: 'err', text: 'Cần cấu hình URL Apps Script (tab Xếp lịch) trước.' });
+      return;
+    }
+    setSyncingShifts(true);
+    setColorMsg(null);
+    try {
+      const res = await syncShiftsFromSheet(webhookUrl, weekStart, shifts, scheduleSlots);
+      const { kept, added, removed, slots } = res.stats;
+      const summary =
+        `Đọc ${res.shifts.length} ca từ tab ${res.tab} (${slots} khung giờ).\n\n` +
+        `• Giữ nguyên: ${kept} ca (số TG cần và TG cố định không đổi)\n` +
+        `• Thêm mới: ${added} ca\n` +
+        `• Bỏ đi: ${removed} ca không còn trên Sheet\n\n` +
+        `Ghi đè cấu hình ca hiện tại?`;
+      if (!window.confirm(summary)) {
+        setColorMsg({ type: 'ok', text: 'Đã huỷ, cấu hình giữ nguyên.' });
+        return;
+      }
+      onImportSchedule(res.shifts, res.scheduleSlots);
+      setColorMsg({
+        type: 'ok',
+        text: `Đã đồng bộ ${res.shifts.length} ca từ ${res.tab} · giữ ${kept}, thêm ${added}, bỏ ${removed}.`,
+      });
+    } catch (err) {
+      setColorMsg({
+        type: 'err',
+        text: err instanceof Error ? err.message : 'Không đồng bộ được ca từ Sheet.',
+      });
+    } finally {
+      setSyncingShifts(false);
+    }
+  };
 
   const handleSyncColors = async () => {
     if (!webhookUrl.trim()) {
@@ -373,6 +412,15 @@ export function ScheduleConfig({
           disabled={syncingColors}
         >
           {syncingColors ? 'Đang đồng bộ màu…' : 'Đồng bộ màu lớp từ Sheet'}
+        </button>
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          onClick={handleSyncShifts}
+          disabled={syncingShifts}
+          title="Đọc lớp, GV và khung giờ từ tab TUẦN trên Sheet về đây"
+        >
+          {syncingShifts ? 'Đang đọc ca…' : 'Đồng bộ ca từ Sheet'}
         </button>
         {colorMsg && (
           <span className={colorMsg.type === 'ok' ? 'copy-feedback' : 'sheets-error'}>

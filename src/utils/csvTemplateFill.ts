@@ -600,3 +600,95 @@ export function buildCellUpdatesPayload(
     updates: updates.map((u) => ({ row: u.row, col: u.col, value: u.value })),
   };
 }
+
+/** Một ca đọc được từ lưới Sheet — chưa gắn id, chưa biết cần bao nhiêu TG. */
+export interface ScannedShift {
+  facility: Facility;
+  level: Level;
+  day: DayOfWeek;
+  slotLabel: string;
+  className: string;
+  teacher?: string;
+}
+
+export interface SheetShiftScan {
+  shifts: ScannedShift[];
+  /** Nhãn khung giờ theo từng khối cơ sở+cấp, giữ nguyên thứ tự trên Sheet */
+  slotLabelsByKey: Record<string, string[]>;
+}
+
+function extractTeacher(text: string): string {
+  const m = String(text || '').match(/\(([^)]+)\)/);
+  return m ? m[1].replace(/\s+/g, ' ').trim() : '';
+}
+
+/**
+ * Đọc cấu trúc lịch từ lưới Sheet: mỗi ô mã lớp thành một ca, kèm khung giờ
+ * của khối chứa nó. Dùng đúng cách dò vùng như khi ghi tên TG lên Sheet, nên
+ * ca đọc về khớp với ca ghi đi.
+ */
+export function scanShiftsFromSheetGrid(grid: string[][]): SheetShiftScan {
+  const shifts: ScannedShift[] = [];
+  const slotLabelsByKey: Record<string, string[]> = {};
+
+  for (const fac of FACILITY_ANCHORS) {
+    const anchorCol = findAnchorCol(grid, fac.text, fac.minCol);
+    if (anchorCol < 0) continue;
+
+    const regionStart = Math.max(0, anchorCol - 2);
+    const regionEnd = Math.min(grid[0]?.length ?? 40, anchorCol + 16);
+    const fromRow = 3;
+    const toRow = Math.min(grid.length - 1, 80);
+
+    const timeCol = detectTimeCol(grid, regionStart, regionEnd, fromRow, toRow);
+    const nameColStart = timeCol + 2;
+    const sections = findLevelSections(
+      grid,
+      timeCol,
+      regionStart,
+      fromRow,
+      toRow,
+      fac.id,
+      nameColStart,
+    );
+
+    for (const level of LEVEL_ORDER) {
+      const section = sections[level];
+      if (!section) continue;
+
+      const key = `${fac.id}-${level}`;
+      const labels: string[] = [];
+
+      for (const block of section.timeBlocks) {
+        const slotLabel = block.slot.trim();
+        if (!slotLabel) continue;
+        if (!labels.includes(slotLabel)) labels.push(slotLabel);
+
+        for (const row of block.rows) {
+          for (let day = 0; day < 7; day++) {
+            const classCol = nameColStart + day * 2 + 1;
+            const raw = (grid[row]?.[classCol] ?? '').trim();
+            if (!looksLikeClass(raw)) continue;
+
+            const className = classCore(raw).replace(/\s+/g, ' ').trim();
+            if (!className) continue;
+            const teacher = extractTeacher(raw);
+
+            shifts.push({
+              facility: fac.id,
+              level,
+              day: day as DayOfWeek,
+              slotLabel,
+              className,
+              ...(teacher ? { teacher } : {}),
+            });
+          }
+        }
+      }
+
+      if (labels.length > 0) slotLabelsByKey[key] = labels;
+    }
+  }
+
+  return { shifts, slotLabelsByKey };
+}

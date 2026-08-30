@@ -215,6 +215,16 @@ export function AdminApp() {
     [setShifts],
   );
 
+  /** Nạp lại toàn bộ cấu hình ca từ Sheet — kết quả xếp lịch cũ không còn hợp lệ. */
+  const handleImportSchedule = useCallback(
+    (nextShifts: Shift[], nextScheduleSlots: ScheduleSlotsMap) => {
+      setShifts(nextShifts);
+      setScheduleSlots(nextScheduleSlots);
+      setScheduleResult(null);
+    },
+    [setShifts, setScheduleSlots, setScheduleResult],
+  );
+
   const handleUpdateCell = useCallback(
     (day: DayOfWeek, slotId: string, text: string) => {
       setRegistrationGrid((prev) => ({
@@ -452,6 +462,7 @@ export function AdminApp() {
                 onAddShift={handleAddShift}
                 onRemoveShift={handleRemoveShift}
                 onWeekStartChange={setWeekStart}
+                onImportSchedule={handleImportSchedule}
                 onUpdateScheduleSlots={handleUpdateScheduleSlots}
                 onRemoveScheduleSlot={handleRemoveScheduleSlot}
               />

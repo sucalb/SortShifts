@@ -1,6 +1,8 @@
 import { autoSchedule } from '../src/utils/scheduler';
 import { analyzeLoneShifts } from '../src/utils/loneShifts';
 import { taFragmentationCost } from '../src/utils/shiftContiguity';
+import { scanShiftsFromSheetGrid } from '../src/utils/csvTemplateFill';
+import { buildScheduleFromSheetGrid } from '../src/utils/sheetShiftImport';
 import { SCHEDULE_SLOTS, REGISTRATION_SLOTS } from '../src/data/constants';
 import type { DayOfWeek, Shift } from '../src/types';
 import type { RegistrationGrid } from '../src/utils/registrationUtils';
@@ -110,6 +112,46 @@ console.log('\n--- Báo cáo ca lẻ ---');
 { const g = emptyGrid(); g[5]!['reg-2']='A'; g[5]!['reg-3']='A';
   const ss = [shift('am',5,'cs1c3-2'), shift('pm',5,'cs1c3-3')];
   check('nghỉ trưa -> 2 cụm rời', analyzeLoneShifts(autoSchedule(ss,g).assignments, ss, g).entries.length === 2); }
+
+console.log('\n--- Đồng bộ ca từ Sheet ---');
+{
+  const W = 12;
+  const row = (): string[] => Array(W).fill('');
+  const g: string[][] = Array.from({ length: 8 }, row);
+  g[0][0] = 'LỊCH LÀM VIỆC MÔN TIẾNG ANH CƠ SỞ 1';
+  g[3][1] = 'CẤP 3';
+  g[4][1] = '7:00 - 9:00';
+  g[4][4] = '10 B1';              // T2, cột lớp = 3 + 0*2 + 1
+  g[4][6] = '10 B2\n(TÂN)';       // T3
+  g[5][1] = '9:00 - 11:00';
+  g[5][4] = '11 B1';              // T2
+
+  const scan = scanShiftsFromSheetGrid(g);
+  check('đọc được 3 ca', scan.shifts.length === 3, JSON.stringify(scan.shifts));
+  const c1 = scan.shifts.find(x => x.className === '10 B1');
+  check('đúng ngày/khung giờ', c1?.day === 0 && c1?.slotLabel === '7:00 - 9:00', JSON.stringify(c1));
+  check('tách được tên GV', scan.shifts.find(x => x.className === '10 B2')?.teacher === 'TÂN',
+        JSON.stringify(scan.shifts.find(x => x.className === '10 B2')));
+  check('gom khung giờ theo khối', scan.slotLabelsByKey['coso1-cap3']?.length === 2,
+        JSON.stringify(scan.slotLabelsByKey));
+
+  // Ca đã có phải giữ nguyên staffNeeded + TG cố định
+  const existingSlots = { 'coso1-cap3': [{ id: 'old-slot', label: '7:00 - 9:00', start: 420, end: 540 }] };
+  const existing: Shift[] = [{
+    id: 'giu-nguyen', facility: 'coso1', level: 'cap3', day: 0,
+    timeSlotId: 'old-slot', className: '10 B1', staffNeeded: 3, fixedTaNames: ['Khang'],
+  }];
+  const built = buildScheduleFromSheetGrid(scan, existing, existingSlots);
+  const kept = built.shifts.find(x => x.className === '10 B1');
+  check('giữ nguyên số TG cần', kept?.staffNeeded === 3, String(kept?.staffNeeded));
+  check('giữ nguyên TG cố định', kept?.fixedTaNames?.[0] === 'Khang', JSON.stringify(kept?.fixedTaNames));
+  check('giữ nguyên id ca cũ', kept?.id === 'giu-nguyen', kept?.id);
+  check('tái dùng khung giờ cũ', kept?.timeSlotId === 'old-slot', kept?.timeSlotId);
+  check('ca mới mặc định cần 1 TG',
+        built.shifts.find(x => x.className === '11 B1')?.staffNeeded === 1);
+  check('thống kê đúng', built.stats.kept === 1 && built.stats.added === 2 && built.stats.removed === 0,
+        JSON.stringify(built.stats));
+}
 
 console.log('\n--- Ổn định & hiệu năng ---');
 { const g = emptyGrid();
