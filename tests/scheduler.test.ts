@@ -262,6 +262,23 @@ console.log('\n--- Import lịch đăng ký ---');
         !('error' in res) && res.grid[0]?.['r0'] === 'A',
         JSON.stringify(res));
 }
+{ // Khung giờ trên bảng dán mà app không có -> phải báo, không được im lặng bỏ
+  const slots = [{ id:'r0', label:'7:00 - 9:00', start:420, end:540 }];
+  const paste = [
+    'CA\tTHỨ HAI\tTHỨ BA\tTHỨ TƯ\tTHỨ NĂM\tTHỨ SÁU\tTHỨ BẢY\tCHỦ NHẬT',
+    '7:00 - 9:00\tA\t—\t—\t—\t—\t—\t—',
+    '6:00 - 8:00\t—\t—\t—\t—\t—\tB\tC',
+  ].join('\n');
+  const res = parseRegistrationImport(paste, slots);
+  check('vẫn nhận khung khớp', !('error' in res) && res.grid[0]?.['r0'] === 'A', JSON.stringify(res));
+  check('báo khung bị bỏ', !('error' in res) && res.skippedSlots.includes('6:00 - 8:00'),
+        'error' in res ? res.error : JSON.stringify(res.skippedSlots)); }
+{ // Hàng không khớp nhưng rỗng thì không cần báo
+  const slots = [{ id:'r0', label:'7:00 - 9:00', start:420, end:540 }];
+  const paste = '7:00 - 9:00\tA\t—\t—\t—\t—\t—\t—\n6:00 - 8:00\t—\t—\t—\t—\t—\t—\t—';
+  const res = parseRegistrationImport(paste, slots);
+  check('hàng rỗng không báo thừa', !('error' in res) && res.skippedSlots.length === 0,
+        'error' in res ? res.error : JSON.stringify(res.skippedSlots)); }
 { // TG viết tắt trùng tên ngày không được coi là header
   const slots = [{ id:'r0', label:'7:00 - 9:00', start:420, end:540 }];
   const paste = '7:00 - 9:00\tCN\t—\t—\t—\t—\t—\t—';

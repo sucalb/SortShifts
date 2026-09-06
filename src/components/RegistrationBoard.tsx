@@ -69,7 +69,16 @@ export function RegistrationBoard({
       return;
     }
     onImportGrid(result.grid);
-    setImportMsg({ type: 'ok', text: `Đã import ${result.filled} ô có dữ liệu.` });
+    setImportMsg(
+      result.skippedSlots.length > 0
+        ? {
+            type: 'err',
+            text:
+              `Đã import ${result.filled} ô, nhưng BỎ QUA khung giờ ${result.skippedSlots.join(', ')} ` +
+              `vì app không có khung nào khớp. Thêm khung đó ở "Chỉnh khung giờ" rồi import lại.`,
+          }
+        : { type: 'ok', text: `Đã import ${result.filled} ô có dữ liệu.` },
+    );
     setImportText('');
   };
 

@@ -66,6 +66,8 @@ export function parseRegistrationImport(
 ): {
   grid: RegistrationGrid;
   filled: number;
+  /** Nhãn giờ trên bảng dán vào mà app không có khung tương ứng — dữ liệu bị bỏ */
+  skippedSlots: string[];
 } | { error: string } {
   const lines = paste
     .trim()
@@ -82,6 +84,7 @@ export function parseRegistrationImport(
   const days: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
   let filled = 0;
   let sequentialRow = 0;
+  const skippedSlots: string[] = [];
 
   for (const line of lines) {
     const cells = splitRow(line);
@@ -97,6 +100,13 @@ export function parseRegistrationImport(
 
     if (looksLikeTimeRow(cells[0])) {
       slotIdx = matchSlotRow(cells[0], slots);
+      if (slotIdx < 0) {
+        // Có dữ liệu thật ở hàng này nhưng app không có khung giờ khớp
+        if (cells.slice(1, 8).some((c) => c && c !== '—' && c !== '-')) {
+          skippedSlots.push(cells[0].trim());
+        }
+        continue;
+      }
       dayCells = cells.slice(1, 8);
     } else if (cells.length >= 7) {
       slotIdx = sequentialRow;
@@ -120,12 +130,18 @@ export function parseRegistrationImport(
   }
 
   if (filled === 0) {
+    const hint =
+      skippedSlots.length > 0
+        ? ` Bảng có khung giờ ${skippedSlots.join(', ')} nhưng app không có khung nào khớp — sửa ở "Chỉnh khung giờ".`
+        : '';
     return {
-      error: `Không đọc được ô nào. Copy cả bảng từ Sheets (7 cột ngày × ${slots.length} dòng ca). Có thể gồm cột giờ bên trái.`,
+      error:
+        `Không đọc được ô nào. Copy cả bảng từ Sheets (7 cột ngày × ${slots.length} dòng ca). ` +
+        `Có thể gồm cột giờ bên trái.${hint}`,
     };
   }
 
-  return { grid, filled };
+  return { grid, filled, skippedSlots };
 }
 
 export function registrationGridToTsv(
