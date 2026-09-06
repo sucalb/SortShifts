@@ -1,5 +1,6 @@
 import { autoSchedule } from '../src/utils/scheduler';
 import { analyzeLoneShifts } from '../src/utils/loneShifts';
+import { parseRegistrationImport } from '../src/utils/importRegistration';
 import { taFragmentationCost } from '../src/utils/shiftContiguity';
 import { scanShiftsFromSheetGrid } from '../src/utils/csvTemplateFill';
 import { buildScheduleFromSheetGrid } from '../src/utils/sheetShiftImport';
@@ -219,6 +220,55 @@ console.log('\n--- Đồng bộ ca từ Sheet ---');
         built.shifts.find(x => x.className === '11 B1')?.staffNeeded === 1);
   check('thống kê đúng', built.stats.kept === 1 && built.stats.added === 2 && built.stats.removed === 0,
         JSON.stringify(built.stats));
+}
+
+console.log('\n--- Import lịch đăng ký ---');
+{
+  const slots = [
+    { id:'r0', label:'7:00 - 9:00',   start:420,  end:540  },
+    { id:'r1', label:'9:00 - 10:30',  start:540,  end:630  },
+    { id:'r2', label:'10:30 - 12:00', start:630,  end:720  },
+    { id:'r3', label:'17:00 - 19:00', start:1020, end:1140 },
+  ];
+  const paste = [
+    'CA\tTHỨ HAI\tTHỨ BA\tTHỨ TƯ\tTHỨ NĂM\tTHỨ SÁU\tTHỨ BẢY\tCHỦ NHẬT',
+    '\t7/9/2026\t8/9/2026\t9/9/2026\t10/9/2026\t11/9/2026\t12/9/2026\t13/9/2026',
+    '7:00 - 9:00\t—\t—\t—\t—\t—\tKhang\tÝ',
+    '9:00 - 10:30\t—\t—\t—\t—\t—\tKhang, Ý\tH.Long',
+    '17:00 - 19:00\tKhang, Khải\t—\t—\t—\t—\t—\t—',
+  ].join('\n');
+
+  const res = parseRegistrationImport(paste, slots);
+  if ('error' in res) { check('import không lỗi', false, res.error); }
+  else {
+    const cell = (d: DayOfWeek, id: string) => res.grid[d]?.[id] ?? '';
+    check('không lọt tên ngày vào lưới',
+          !JSON.stringify(res.grid).includes('THỨ') && !JSON.stringify(res.grid).includes('CHỦ NHẬT'),
+          JSON.stringify(res.grid));
+    check('T7 khung đầu đúng', cell(5,'r0') === 'Khang', cell(5,'r0'));
+    check('CN khung đầu đúng', cell(6,'r0') === 'Ý', cell(6,'r0'));
+    check('khung thứ 2 không bị đẩy lệch', cell(5,'r1') === 'Khang, Ý', cell(5,'r1'));
+    check('khung 17-19 đúng ngày', cell(0,'r3') === 'Khang, Khải', cell(0,'r3'));
+  }
+}
+{ // Header chỉ có tên ngày, không có cột "CA"
+  const slots = [{ id:'r0', label:'7:00 - 9:00', start:420, end:540 }];
+  const paste = [
+    'THỨ HAI\tTHỨ BA\tTHỨ TƯ\tTHỨ NĂM\tTHỨ SÁU\tTHỨ BẢY\tCHỦ NHẬT',
+    '7:00 - 9:00\tA\t—\t—\t—\t—\t—\t—',
+  ].join('\n');
+  const res = parseRegistrationImport(paste, slots);
+  check('bỏ header dù không có cột CA',
+        !('error' in res) && res.grid[0]?.['r0'] === 'A',
+        JSON.stringify(res));
+}
+{ // TG viết tắt trùng tên ngày không được coi là header
+  const slots = [{ id:'r0', label:'7:00 - 9:00', start:420, end:540 }];
+  const paste = '7:00 - 9:00\tCN\t—\t—\t—\t—\t—\t—';
+  const res = parseRegistrationImport(paste, slots);
+  check('không nhầm TG tên "CN" là header',
+        !('error' in res) && res.grid[0]?.['r0'] === 'CN',
+        JSON.stringify(res));
 }
 
 console.log('\n--- Ổn định & hiệu năng ---');

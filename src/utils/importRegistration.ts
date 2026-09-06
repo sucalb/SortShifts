@@ -17,7 +17,35 @@ function matchSlotRow(cell: string, slots: TimeSlot[]): number {
 }
 
 function isDateHeader(cell: string): boolean {
-  return /^\d{1,2}[\/\-]\d{1,2}/.test(cell.trim());
+  return /^\d{1,2}[/-]\d{1,2}/.test(cell.trim());
+}
+
+/** "THỨ BẢY", "CHỦ NHẬT", "T7", "CN"… — tên ngày ở dòng tiêu đề, không phải tên TG */
+function isDayNameHeader(cell: string): boolean {
+  const t = cell.trim().replace(/\s+/g, ' ').toUpperCase();
+  if (!t) return false;
+  return (
+    /^TH[ỨU] ?(HAI|BA|T[ƯU]|N[ĂA]M|S[ÁA]U|B[ẢA]Y|[2-7])$/.test(t) ||
+    /^CH[ỦU] ?NH[ẬA]T$/.test(t) ||
+    /^(CN|T[2-7])$/.test(t)
+  );
+}
+
+/**
+ * Dòng tiêu đề của bảng, cần bỏ qua. Thiếu bước này thì dòng tên ngày bị coi
+ * là dòng dữ liệu và tên ngày lọt vào lưới đăng ký như thể là tên TG.
+ */
+function isHeaderRow(cells: string[], nonEmpty: string[]): boolean {
+  if (nonEmpty.every(isDateHeader)) return true;
+
+  // Cần vài ô mới chắc là tiêu đề — một TG tên "CN" không được tính là header
+  if (nonEmpty.filter(isDayNameHeader).length >= 3) return true;
+
+  const first = (cells[0] ?? '').trim().toLowerCase();
+  if (first === 'ca' || first === '') {
+    return nonEmpty.every((c, i) => i === 0 || isDateHeader(c) || isDayNameHeader(c));
+  }
+  return false;
 }
 
 function looksLikeTimeRow(cell: string): boolean {
@@ -62,12 +90,7 @@ export function parseRegistrationImport(
     const nonEmpty = cells.filter((c) => c && c !== '—' && c !== '-');
     if (nonEmpty.length === 0) continue;
 
-    if (
-      nonEmpty.every(isDateHeader) ||
-      (cells[0] === 'Ca' && nonEmpty.every((c, i) => i === 0 || isDateHeader(c)))
-    ) {
-      continue;
-    }
+    if (isHeaderRow(cells, nonEmpty)) continue;
 
     let slotIdx: number;
     let dayCells: string[];
