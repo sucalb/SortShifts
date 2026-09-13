@@ -2,6 +2,7 @@ import { autoSchedule } from '../src/utils/scheduler';
 import { analyzeLoneShifts } from '../src/utils/loneShifts';
 import { parseRegistrationImport } from '../src/utils/importRegistration';
 import { taFragmentationCost } from '../src/utils/shiftContiguity';
+import { getAssignmentWarnings } from '../src/utils/assignmentValidation';
 import { scanShiftsFromSheetGrid } from '../src/utils/csvTemplateFill';
 import { buildScheduleFromSheetGrid } from '../src/utils/sheetShiftImport';
 import { SCHEDULE_SLOTS, REGISTRATION_SLOTS } from '../src/data/constants';
@@ -57,6 +58,14 @@ check('slot lạ', autoSchedule([shift('a',0,'xx')], emptyGrid()).assignments.le
   const r = autoSchedule(ss, g, undefined, { GV1:['C'] });
   check('TG cố định vẫn ở nguyên ca', r.assignments.find(a=>a.shiftId==='fixed')?.staffIds.includes('C') === true,
         JSON.stringify(r.assignments)); }
+
+{ // 9:00-10:30 và 10:00-12:00 chồng 30 phút -> không tính trùng
+  const g = emptyGrid(); g[5]!['reg-1']='A'; g[5]!['reg-2']='A';
+  const ss = [shift('a',5,'cs1c3-1'), shift('b',5,'cs1c3-2')];
+  const r = autoSchedule(ss, g);
+  check('chồng 30 phút vẫn xếp được cả hai', r.stats.totalSlotsFilled === 2, JSON.stringify(r.assignments));
+  const warns = getAssignmentWarnings(ss[1], ['A'], [{shiftId:'a',staffIds:['A']},{shiftId:'b',staffIds:['A']}], ss, g);
+  check('chồng 30 phút không báo trùng', !warns.some(w => w.type === 'conflict'), JSON.stringify(warns)); }
 
 console.log('\n--- Nối ca liền nhau ---');
 { const g = emptyGrid(); g[0]!['reg-5']='A, B'; g[0]!['reg-6']='A, B';
@@ -306,7 +315,7 @@ console.log('\n--- Ổn định & hiệu năng ---');
   let clash = 0;
   for (const a of r1.assignments) { const sh = shiftById.get(a.shiftId)!; const sl = slotById.get(sh.timeSlotId)!;
     for (const n of a.staffIds) { const l = byName.get(n) ?? [];
-      if (l.some(x => x.day===sh.day && x.start<sl.end && sl.start<x.end)) clash++;
+      if (l.some(x => x.day===sh.day && Math.min(x.end,sl.end)-Math.max(x.start,sl.start) > 30)) clash++;
       l.push({day:sh.day,start:sl.start,end:sl.end}); byName.set(n,l); } }
   check('0 xung đột giờ', clash === 0, clash + ' xung đột'); }
 

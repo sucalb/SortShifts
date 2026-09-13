@@ -334,10 +334,11 @@ export function ScheduleConfig({
     setColorMsg(null);
     try {
       const res = await syncShiftsFromSheet(webhookUrl, weekStart, shifts, scheduleSlots);
-      const { kept, added, removed, slots } = res.stats;
+      const { kept, moved, added, removed, slots } = res.stats;
       const summary =
         `Đọc ${res.shifts.length} ca từ tab ${res.tab} (${slots} khung giờ).\n\n` +
         `• Giữ nguyên: ${kept} ca (số TG cần và TG cố định không đổi)\n` +
+        `• Dời lịch: ${moved} ca (đổi ngày/giờ, vẫn giữ số TG cần và TG cố định)\n` +
         `• Thêm mới: ${added} ca\n` +
         `• Bỏ đi: ${removed} ca không còn trên Sheet\n\n` +
         `Ghi đè cấu hình ca hiện tại?`;
@@ -348,7 +349,7 @@ export function ScheduleConfig({
       onImportSchedule(res.shifts, res.scheduleSlots);
       setColorMsg({
         type: 'ok',
-        text: `Đã đồng bộ ${res.shifts.length} ca từ ${res.tab} · giữ ${kept}, thêm ${added}, bỏ ${removed}.`,
+        text: `Đã đồng bộ ${res.shifts.length} ca từ ${res.tab} · giữ ${kept}, dời ${moved}, thêm ${added}, bỏ ${removed}.`,
       });
     } catch (err) {
       setColorMsg({

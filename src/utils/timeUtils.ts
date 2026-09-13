@@ -17,12 +17,27 @@ export function getShiftTimeSlot(shift: Shift): TimeSlot | undefined {
   return getTimeSlotById(shift.timeSlotId);
 }
 
+/**
+ * Hai ca chồng nhau không quá chừng này (phút) vẫn không tính là trùng giờ.
+ * Khung trên Sheet hay ghi lệch, vd. 9:00-10:30 và 10:00-12:00 — trên thực tế
+ * vẫn làm nối được, báo trùng ở đây chỉ gây nhiễu.
+ */
+export const SHIFT_OVERLAP_TOLERANCE_MINUTES = 30;
+
+/** Số phút hai khoảng thời gian đè lên nhau (<= 0 là không đè). */
+export function overlapMinutes(
+  a: { start: number; end: number },
+  b: { start: number; end: number },
+): number {
+  return Math.min(a.end, b.end) - Math.max(a.start, b.start);
+}
+
 export function shiftsConflict(a: Shift, b: Shift): boolean {
   if (a.day !== b.day) return false;
   const slotA = getShiftTimeSlot(a);
   const slotB = getShiftTimeSlot(b);
   if (!slotA || !slotB) return false;
-  return timeOverlaps(slotA, slotB);
+  return overlapMinutes(slotA, slotB) > SHIFT_OVERLAP_TOLERANCE_MINUTES;
 }
 
 export function isStaffAvailableForShift(

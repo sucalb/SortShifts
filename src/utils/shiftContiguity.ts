@@ -1,5 +1,9 @@
 import type { DayOfWeek, Facility, Level, Shift } from '../types';
-import { getShiftTimeSlot } from './timeUtils';
+import {
+  getShiftTimeSlot,
+  overlapMinutes,
+  SHIFT_OVERLAP_TOLERANCE_MINUTES,
+} from './timeUtils';
 
 /** Một ca đã xếp, quy về khoảng thời gian trong ngày. */
 export interface ShiftInterval {
@@ -72,9 +76,10 @@ export function isAdjacentRange(
   b: { start: number; end: number },
   gapMinutes: number,
 ): boolean {
-  if (a.start < b.end && b.start < a.end) return false;
-  const gap = a.start >= b.end ? a.start - b.end : b.start - a.end;
-  return gap <= gapMinutes;
+  const overlap = overlapMinutes(a, b);
+  // Chồng nhẹ (vd. 9:00-10:30 với 10:00-12:00) coi như nối liền
+  if (overlap > 0) return overlap <= SHIFT_OVERLAP_TOLERANCE_MINUTES;
+  return -overlap <= gapMinutes;
 }
 
 /** Gộp ca của một TG thành các cụm liền nhau, sắp theo ngày rồi giờ bắt đầu. */
@@ -150,8 +155,7 @@ export function taFragmentationCost(
 
 /**
  * Hai ca ở hai cơ sở khác nhau, cùng ngày, mà không đủ thời gian đi lại.
- * Đây là ràng buộc cứng chứ không phải điểm trừ: không ai kết thúc 19:00 ở
- * cơ sở này rồi có mặt lúc 19:00 ở cơ sở kia.
+ * Chỉ dùng để cảnh báo — hết người thì chạy giữa hai cơ sở là bất khả kháng.
  */
 export function needsTravelGap(
   a: ShiftInterval,
@@ -175,7 +179,6 @@ export function intervalsConflict(
       iv.shiftId !== excludeShiftId &&
       iv.shiftId !== target.shiftId &&
       iv.day === target.day &&
-      iv.start < target.end &&
-      target.start < iv.end,
+      overlapMinutes(iv, target) > SHIFT_OVERLAP_TOLERANCE_MINUTES,
   );
 }
