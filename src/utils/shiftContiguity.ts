@@ -65,8 +65,6 @@ export interface ShiftBlock {
   day: DayOfWeek;
   start: number;
   end: number;
-  /** Cụm chỉ gồm ca cùng một cơ sở — đổi cơ sở là cắt cụm */
-  facility: Facility;
   intervals: ShiftInterval[];
 }
 
@@ -90,12 +88,9 @@ export function groupIntoBlocks(intervals: ShiftInterval[], gapMinutes: number):
   const blocks: ShiftBlock[] = [];
   for (const iv of sorted) {
     const last = blocks[blocks.length - 1];
-    if (
-      last &&
-      last.day === iv.day &&
-      last.facility === iv.facility &&
-      iv.start - last.end <= gapMinutes
-    ) {
+    // Làm liền giữa hai cơ sở vẫn là một cụm — người đó không bị lẻ ca,
+    // chỉ phải di chuyển (đã có điểm trừ riêng cho việc đổi cơ sở).
+    if (last && last.day === iv.day && iv.start - last.end <= gapMinutes) {
       last.end = Math.max(last.end, iv.end);
       last.intervals.push(iv);
       continue;
@@ -104,7 +99,6 @@ export function groupIntoBlocks(intervals: ShiftInterval[], gapMinutes: number):
       day: iv.day,
       start: iv.start,
       end: iv.end,
-      facility: iv.facility,
       intervals: [iv],
     });
   }
@@ -135,18 +129,20 @@ export function taFragmentationCost(
       cost += weights.loneBlock;
     }
 
-    // Đổi cấp giữa hai ca liền nhau trong cùng cụm
+    // Đổi cơ sở / đổi cấp giữa hai ca liền nhau trong cùng cụm
     for (let j = 1; j < block.intervals.length; j++) {
-      if (block.intervals[j].level !== block.intervals[j - 1].level) {
-        cost += weights.levelSwitch;
-      }
+      const a = block.intervals[j - 1];
+      const b = block.intervals[j];
+      if (a.facility !== b.facility) cost += weights.facilitySwitch;
+      else if (a.level !== b.level) cost += weights.levelSwitch;
     }
 
     const prev = blocks[i - 1];
     if (prev && prev.day === block.day) {
       cost += weights.extraBlock;
       cost += (weights.idleHour * (block.start - prev.end)) / 60;
-      if (prev.facility !== block.facility) cost += weights.facilitySwitch;
+      const prevLast = prev.intervals[prev.intervals.length - 1];
+      if (prevLast.facility !== block.intervals[0].facility) cost += weights.facilitySwitch;
     }
   }
 

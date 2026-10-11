@@ -195,8 +195,6 @@ export function autoSchedule(
     for (const other of shifts) {
       if (other.id === shift.id) continue;
       if (other.day !== shift.day) continue;
-      // Khác cơ sở thì phải di chuyển — không tính là nối ca được
-      if (other.facility !== shift.facility) continue;
       const otherInterval = intervalByShift.get(other.id);
       if (!otherInterval) continue;
       if (isAdjacentRange(otherInterval, interval, adjacentGapMinutes)) neighbours.push(other.id);

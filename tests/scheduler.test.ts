@@ -136,7 +136,13 @@ console.log('\n--- Cơ sở & cấp ---');
   const cungCoSo = taFragmentationCost([cs1a, cs1b], w, 30);
   const khacCoSo = taFragmentationCost([cs1a, cs2b], w, 30);
   check('cùng cơ sở nối liền = 0 phạt', cungCoSo === 0, String(cungCoSo));
-  check('khác cơ sở bị phạt nặng', khacCoSo >= 32, String(khacCoSo)); }
+  check('đổi cơ sở liền nhau chỉ bị phạt đổi cơ sở', khacCoSo === 20, String(khacCoSo)); }
+{ // 17h CS1 + 19h CS2: làm liền 4 tiếng, KHÔNG phải ca lẻ
+  const g = emptyGrid(); g[0]!['reg-5']='A'; g[0]!['reg-6']='A';
+  const ss = [shift('cs1',0,'cs1c3-5'), { ...shift('cs2',0,'cs2c3-2'), facility:'coso2' as const }];
+  const rep = analyzeLoneShifts([{shiftId:'cs1',staffIds:['A']},{shiftId:'cs2',staffIds:['A']}], ss, g);
+  check('17h CS1 + 19h CS2 không bị báo ca lẻ', rep.entries.length === 0,
+        JSON.stringify(rep.entries.map(e => [e.name, e.shift.id, e.reason]))); }
 { // Đổi cấp trong cùng cụm bị phạt nhẹ
   const w = { extraBlock:12, loneBlock:8, idleHour:1.5, loadBalance:0, facilitySwitch:20, levelSwitch:2 };
   const a = { shiftId:'a', day:0 as DayOfWeek, start:1020, end:1140, facility:'coso1' as const, level:'cap3' as const };
