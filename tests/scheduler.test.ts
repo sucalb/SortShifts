@@ -2,6 +2,7 @@ import { autoSchedule } from '../src/utils/scheduler';
 import { analyzeLoneShifts } from '../src/utils/loneShifts';
 import { parseRegistrationImport } from '../src/utils/importRegistration';
 import { taFragmentationCost } from '../src/utils/shiftContiguity';
+import { findDoubleBookings } from '../src/utils/assignmentValidation';
 import { getAssignmentWarnings } from '../src/utils/assignmentValidation';
 import { scanShiftsFromSheetGrid } from '../src/utils/csvTemplateFill';
 import { buildScheduleFromSheetGrid } from '../src/utils/sheetShiftImport';
@@ -302,6 +303,38 @@ console.log('\n--- Import lịch đăng ký ---');
         !('error' in res) && res.grid[0]?.['r0'] === 'CN',
         JSON.stringify(res));
 }
+
+console.log('\n--- Không bao giờ xếp trùng giờ ---');
+{ // Phát hiện: Ý ở 12 B1 (CẤP 3) và 3.1 (CẤP 1) cùng T4 17-19
+  const ss = [shift('12b1',2,'cs1c3-5'), { ...shift('31',2,'cs1c1-1'), level:'cap1' as const }];
+  const d = findDoubleBookings([{shiftId:'12b1',staffIds:['Ý']},{shiftId:'31',staffIds:['Ý']}], ss);
+  check('phát hiện trùng giờ khác cấp', d.length === 1 && d[0].name === 'Ý', JSON.stringify(d.map(x=>x.name)));
+  const ok = findDoubleBookings([{shiftId:'12b1',staffIds:['Ý']},{shiftId:'31',staffIds:['Bảo']}], ss);
+  check('không báo nhầm khi khác người', ok.length === 0); }
+{ // Bất biến: bộ xếp lịch không bao giờ tự tạo ca trùng, kể cả có TG cố định
+  let seed = 12345;
+  const rnd = () => { seed = (seed*1103515245+12345)%2147483648; return seed/2147483648; };
+  const NAMES = ['Ý','Bảo','Quang','Huy','Khải','Thịnh','An','T.Phú','Quân','H.Long'];
+  let bad = 0, runs = 0;
+  for (let k = 0; k < 200; k++) {
+    const g = emptyGrid();
+    for (const d of days) for (const sl of REGISTRATION_SLOTS)
+      g[d]![sl.id] = NAMES.filter(() => rnd() < 0.35).join(', ');
+    const ss: Shift[] = [];
+    for (const [key, slots] of Object.entries(SCHEDULE_SLOTS)) {
+      const [facility, level] = key.split('-') as ['coso1'|'coso2','cap1'|'cap2'|'cap3'];
+      for (const day of days) for (const sl of slots) {
+        if (rnd() < 0.5) continue;
+        ss.push({ id:`${key}-${day}-${sl.id}`, facility, level, day, timeSlotId:sl.id, className:'c',
+          staffNeeded: 1 + Math.floor(rnd()*2),
+          ...(rnd() < 0.2 ? { fixedTaNames: [NAMES[Math.floor(rnd()*NAMES.length)]] } : {}) });
+      }
+    }
+    const r = autoSchedule(ss, g);
+    runs++;
+    if (findDoubleBookings(r.assignments, ss).length > 0) bad++;
+  }
+  check(`200 kịch bản ngẫu nhiên: 0 lần xếp trùng giờ`, bad === 0, `${bad}/${runs} lần trùng`); }
 
 console.log('\n--- Ổn định & hiệu năng ---');
 { const g = emptyGrid();

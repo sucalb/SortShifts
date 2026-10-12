@@ -10,6 +10,7 @@ import {
   syncScheduleFromSheet,
 } from '../utils/sheetAutoFill';
 import { checkScriptVersion, pushCellUpdates, weekTabHintFromStart } from '../utils/sheetsSync';
+import { describeDoubleBooking, findDoubleBookings } from '../utils/assignmentValidation';
 
 interface Props {
   shifts: Shift[];
@@ -43,6 +44,16 @@ export function SheetsSyncPanel({ shifts, result, weekStart, roster, onSyncFromS
   const handlePush = async () => {
     if (!result) {
       setStatus({ type: 'err', text: 'Chưa có kết quả xếp lịch — xếp lịch trước khi điền Sheet.' });
+      return;
+    }
+    const clashes = findDoubleBookings(result.assignments, shifts);
+    if (clashes.length > 0) {
+      setStatus({
+        type: 'err',
+        text:
+          `Không điền Sheet: ${clashes.length} chỗ TG bị xếp trùng giờ. Sửa trước đã — ` +
+          clashes.slice(0, 3).map(describeDoubleBooking).join(' · '),
+      });
       return;
     }
     setStatus({ type: 'loading', text: 'Đang đọc Sheet và khớp ca…' });
@@ -260,6 +271,13 @@ export async function autoPushIfEnabled(
   weekStart: string,
 ): Promise<string | null> {
   if (!autoPush || !webhookUrl.trim()) return null;
+  const clashes = findDoubleBookings(result.assignments, shifts);
+  if (clashes.length > 0) {
+    return `Không tự điền Sheet: ${clashes.length} chỗ TG bị xếp trùng giờ — ${clashes
+      .slice(0, 3)
+      .map(describeDoubleBooking)
+      .join(' · ')}`;
+  }
   try {
     const plan = await buildAutoFillPlan(shifts, result, weekStart, webhookUrl);
     if (plan.updates.length === 0) return formatAutoFillPreview(plan);

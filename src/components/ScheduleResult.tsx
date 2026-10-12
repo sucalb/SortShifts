@@ -22,6 +22,8 @@ import {
 } from '../utils/exportSchedule';
 import { resolveClassColor } from '../utils/classColors';
 import {
+  describeDoubleBooking,
+  findDoubleBookings,
   getAssignmentWarnings,
   hasBlockingWarnings,
 } from '../utils/assignmentValidation';
@@ -353,6 +355,21 @@ export function ScheduleResultView({
               </ul>
             </div>
           )}
+
+          {(() => {
+            const clashes = findDoubleBookings(result.assignments, shifts);
+            if (clashes.length === 0) return null;
+            return (
+              <div className="alert alert-danger">
+                <strong>{clashes.length} chỗ trợ giảng bị xếp trùng giờ — sửa trước khi điền Sheet:</strong>
+                <ul>
+                  {clashes.map((d, i) => (
+                    <li key={i}>{describeDoubleBooking(d)}</li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
 
           <LoneShiftReport
             assignments={result.assignments}

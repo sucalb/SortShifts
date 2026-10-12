@@ -102,3 +102,50 @@ export function getAssignmentWarnings(
 export function hasBlockingWarnings(warnings: AssignmentWarning[]): boolean {
   return warnings.some((w) => w.type === 'conflict' || w.type === 'over_capacity');
 }
+
+export interface DoubleBooking {
+  name: string;
+  a: Shift;
+  b: Shift;
+}
+
+/**
+ * Mọi cặp ca một TG bị xếp trùng giờ. Lỗi này có thể lọt vào từ nhiều đường —
+ * sửa tay, đọc ngược từ Sheet — nên kiểm trên kết quả cuối thay vì tin vào
+ * từng bước đã chặn.
+ */
+export function findDoubleBookings(assignments: Assignment[], shifts: Shift[]): DoubleBooking[] {
+  const shiftById = new Map(shifts.map((s) => [s.id, s]));
+  const byName = new Map<string, Shift[]>();
+  for (const asn of assignments) {
+    const shift = shiftById.get(asn.shiftId);
+    if (!shift) continue;
+    for (const raw of asn.staffIds) {
+      const key = raw.trim().toLowerCase();
+      const list = byName.get(key);
+      if (list) list.push(shift);
+      else byName.set(key, [shift]);
+    }
+  }
+
+  const display = new Map<string, string>();
+  for (const asn of assignments) for (const n of asn.staffIds) display.set(n.trim().toLowerCase(), n.trim());
+
+  const out: DoubleBooking[] = [];
+  for (const [key, list] of byName) {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        if (shiftsConflict(list[i], list[j])) {
+          out.push({ name: display.get(key) ?? key, a: list[i], b: list[j] });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+export function describeDoubleBooking(d: DoubleBooking): string {
+  const label = (s: Shift) =>
+    `${FACILITY_LABELS[s.facility]} ${s.className} (${getShiftTimeSlot(s)?.label ?? ''})`;
+  return `${d.name}: ${DAY_LABELS[d.a.day]} — ${label(d.a)} trùng ${label(d.b)}`;
+}

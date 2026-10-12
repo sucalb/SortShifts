@@ -2473,3 +2473,7 @@ html {
 .assignment-warnings .warn-travel {
   color: var(--text-muted);
 }
+
+.alert-danger {
+  background: var(--accent-red);
+}
