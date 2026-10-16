@@ -2477,3 +2477,23 @@ html {
 .alert-danger {
   background: var(--accent-red);
 }
+
+/* ── Trang đăng ký cho trợ giảng ── */
+.ta-register h2 { font-family: var(--font-serif); margin: 0 0 0.5rem; }
+.ta-register-code { color: var(--text-muted); font-size: 0.9em; }
+.ta-register-hint { color: var(--text-muted); font-size: 0.88rem; margin: 0.5rem 0 1rem; }
+.ta-register-row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin: 0.75rem 0; }
+.ta-register-select { padding: 0.5rem 0.6rem; border: 2px solid var(--black); background: var(--surface); font: inherit; min-width: 14rem; }
+.ta-register-count { font-size: 0.88rem; color: var(--text-muted); }
+.ta-register-status { font-size: 0.88rem; margin: 0.5rem 0 0; }
+.ta-register-status.err { color: #b42318; }
+.ta-register-status.ok { color: #1a7f37; }
+.ta-register-table td { padding: 4px; text-align: center; }
+.ta-cell {
+  width: 100%; min-width: 3.25rem; height: 2.5rem;
+  border: 2px solid var(--black); background: var(--surface);
+  font-weight: 700; font-size: 1rem; cursor: pointer;
+  box-shadow: var(--shadow-hard-sm);
+}
+.ta-cell.on { background: var(--accent-green); }
+.ta-cell.closed { background: var(--surface-2); color: var(--text-muted); cursor: not-allowed; box-shadow: none; }

@@ -17,6 +17,12 @@ import {
 } from '../utils/registrationUtils';
 import { parseRosterText, rosterToText } from '../utils/staffUtils';
 import { parseRegistrationImport } from '../utils/importRegistration';
+import {
+  fetchAllRegistrations,
+  fetchBootstrap,
+  findWeekByIsoStart,
+  registrationsToTsv,
+} from '../api/registerApi';
 import { TimeSlotsEditor } from './TimeSlotsEditor';
 
 interface Props {
@@ -62,6 +68,47 @@ export function RegistrationBoard({
     setShowRosterEdit(false);
   };
 
+  const [pullMsg, setPullMsg] = useState<{ type: 'ok' | 'err' | 'loading'; text: string } | null>(
+    null,
+  );
+
+  /** Lấy lịch đăng ký của tuần đang chọn thẳng từ Sheet đăng ký — khỏi copy-paste. */
+  const handlePullFromRegisterSheet = async () => {
+    setPullMsg({ type: 'loading', text: 'Đang tìm tuần trên Sheet đăng ký…' });
+    try {
+      const { weeks, employees } = await fetchBootstrap();
+      const week = findWeekByIsoStart(weeks, weekStart);
+      if (!week) {
+        setPullMsg({
+          type: 'err',
+          text: `Sheet đăng ký chưa có tuần bắt đầu ${weekStart.split('-').reverse().join('/')}. Đổi "Tuần" cho khớp.`,
+        });
+        return;
+      }
+      const { grid, namesByCell } = await fetchAllRegistrations(week.name, employees, (done, total) =>
+        setPullMsg({ type: 'loading', text: `Đang đọc ${week.name}… ${done}/${total} TG` }),
+      );
+      const result = parseRegistrationImport(registrationsToTsv(grid, namesByCell), registrationSlots);
+      if ('error' in result) {
+        setPullMsg({ type: 'err', text: result.error });
+        return;
+      }
+      onImportGrid(result.grid);
+      setPullMsg(
+        result.skippedSlots.length > 0
+          ? {
+              type: 'err',
+              text:
+                `Đã lấy ${result.filled} ô từ ${week.name}, nhưng BỎ QUA khung ${result.skippedSlots.join(', ')} ` +
+                `vì app không có khung khớp — thêm ở "Chỉnh khung giờ" rồi lấy lại.`,
+            }
+          : { type: 'ok', text: `Đã lấy ${result.filled} ô từ ${week.name}.` },
+      );
+    } catch (err) {
+      setPullMsg({ type: 'err', text: `Không đọc được Sheet đăng ký: ${(err as Error).message}` });
+    }
+  };
+
   const handleImport = () => {
     const result = parseRegistrationImport(importText, registrationSlots);
     if ('error' in result) {
@@ -87,6 +134,15 @@ export function RegistrationBoard({
       <div className="panel-header">
         <h2>Đăng ký lịch làm việc</h2>
         <div className="btn-group">
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={handlePullFromRegisterSheet}
+            disabled={pullMsg?.type === 'loading'}
+            title="Đọc lịch TG đã tự đăng ký trên Sheet đăng ký, cho tuần đang chọn"
+          >
+            {pullMsg?.type === 'loading' ? 'Đang lấy…' : 'Lấy từ Sheet đăng ký'}
+          </button>
           <button
             type="button"
             className={`btn btn-import-sheets ${showImport ? 'active' : ''}`}
@@ -118,6 +174,9 @@ export function RegistrationBoard({
             />
           </div>
         </div>
+      {pullMsg && (
+        <p className={pullMsg.type === 'err' ? 'sheets-error' : 'copy-feedback'}>{pullMsg.text}</p>
+      )}
       </div>
 
       <div className="reg-quick-tips">

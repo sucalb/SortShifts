@@ -8,6 +8,7 @@ import { useUserConfigSync } from './hooks/useUserConfigSync';
 import { ScheduleConfig } from './components/ScheduleConfig';
 import { RegistrationBoard } from './components/RegistrationBoard';
 import { ScheduleResultView } from './components/ScheduleResult';
+import { TaRegistrationView } from './components/TaRegistrationView';
 import { UserAuthPanel } from './components/UserAuthPanel';
 import { autoPushIfEnabled } from './components/SheetsSyncPanel';
 import { autoSchedule, recomputeScheduleResult } from './utils/scheduler';
@@ -381,7 +382,12 @@ export function AdminApp() {
   const canSchedule = isAdmin(session?.username);
   const activeTab: Tab = canSchedule ? tab : 'register';
   const visibleNav = canSchedule ? NAV : NAV.filter((item) => item.id === 'register');
-  const page = PAGE_META[activeTab];
+  const page = canSchedule
+    ? PAGE_META[activeTab]
+    : {
+        title: 'Đăng ký lịch làm việc',
+        subtitle: 'Chọn tên, bấm vào các ca bạn làm được rồi đồng bộ lên Sheet.',
+      };
 
   return (
     <div className="app app-shell">
@@ -473,7 +479,8 @@ export function AdminApp() {
                 onRemoveScheduleSlot={handleRemoveScheduleSlot}
               />
             )}
-            {activeTab === 'register' && (
+            {!canSchedule && <TaRegistrationView />}
+            {canSchedule && activeTab === 'register' && (
               <RegistrationBoard
                 registrationGrid={registrationGrid}
                 roster={roster}
