@@ -71,6 +71,30 @@ export async function syncRegistration(
   if (!data.ok) throw new Error(data.error || 'Không ghi được lên Sheet.');
 }
 
+/** Tạo tab tuần mới trên Sheet đăng ký, nhân bản từ tuần gần nhất. `date` là yyyy-mm-dd. */
+export async function createRegisterWeek(isoDate: string): Promise<RegisterWeek> {
+  const [y, m, d] = isoDate.split('-');
+  const res = await fetch(REGISTER_API_URL, {
+    method: 'POST',
+    redirect: 'follow',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ action: 'createWeek', mondayDate: `${d}/${m}/${y}` }),
+  });
+  const data = (await res.json()) as { ok?: boolean; error?: string; week?: RegisterWeek };
+  if (!data.ok || !data.week) throw new Error(data.error || 'Không tạo được tuần mới.');
+  return data.week;
+}
+
+/** Thứ Hai của tuần sau, dạng yyyy-mm-dd — tuần TG cần đăng ký. */
+export function nextMondayIso(today = new Date()): string {
+  const d = new Date(today);
+  d.setHours(0, 0, 0, 0);
+  const dow = d.getDay();
+  d.setDate(d.getDate() + (dow === 0 ? -6 : 1 - dow) + 7);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 function parseDdMmYyyy(s: string): Date {
   const [d, m, y] = s.split('/').map(Number);
   return new Date(y, m - 1, d);
