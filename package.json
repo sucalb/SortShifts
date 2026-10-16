@@ -10,7 +10,7 @@
     "start": "node server/index.mjs",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "test": "tsc -p tsconfig.test.json && tsx tests/scheduler.test.ts",
+    "test": "tsc -p tsconfig.test.json && tsx tests/scheduler.test.mts",
     "preview": "vite preview"
   },
   "dependencies": {

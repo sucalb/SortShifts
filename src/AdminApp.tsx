@@ -11,6 +11,7 @@ import { ScheduleResultView } from './components/ScheduleResult';
 import { UserAuthPanel } from './components/UserAuthPanel';
 import { autoPushIfEnabled } from './components/SheetsSyncPanel';
 import { autoSchedule, recomputeScheduleResult } from './utils/scheduler';
+import { isAdmin } from './utils/localAuth';
 import type { ScheduleResult } from './utils/scheduler';
 import { toggleSlotAccess, type SlotOverrides } from './utils/slotAccess';
 import {
@@ -323,6 +324,7 @@ export function AdminApp() {
   );
 
   const handleRunSchedule = useCallback(async () => {
+    if (!isAdmin(session?.username)) return;
     const hasAnyRegistration = Object.values(registrationGrid).some((day) =>
       Object.values(day ?? {}).some((text) => parseRegisteredNames(text).length > 0),
     );
@@ -348,7 +350,7 @@ export function AdminApp() {
     } catch {
       /* ignore auto-push errors */
     }
-  }, [shifts, registrationGrid, slotOverrides, fixedTaMap, weekStart]);
+  }, [shifts, registrationGrid, slotOverrides, fixedTaMap, weekStart, session]);
 
   const handleUpdateAssignment = useCallback(
     (shiftId: string, staffIds: string[]) => {
@@ -375,7 +377,11 @@ export function AdminApp() {
     [setScheduleResult, setClassColors],
   );
 
-  const page = PAGE_META[tab];
+  // Chỉ admin được cấu hình ca và xếp lịch; người khác chỉ thấy phần đăng ký.
+  const canSchedule = isAdmin(session?.username);
+  const activeTab: Tab = canSchedule ? tab : 'register';
+  const visibleNav = canSchedule ? NAV : NAV.filter((item) => item.id === 'register');
+  const page = PAGE_META[activeTab];
 
   return (
     <div className="app app-shell">
@@ -407,11 +413,11 @@ export function AdminApp() {
         <aside className="sidebar" aria-label="Điều hướng">
           <p className="sidebar-label">Menu</p>
           <nav className="sidebar-nav">
-            {NAV.map((item, i) => (
+            {visibleNav.map((item, i) => (
               <button
                 key={item.id}
                 type="button"
-                className={`sidebar-link ${tab === item.id ? 'active' : ''}`}
+                className={`sidebar-link ${activeTab === item.id ? 'active' : ''}`}
                 onClick={() => setTab(item.id)}
               >
                 <span className="sidebar-link-icon">{item.icon}</span>
@@ -437,7 +443,7 @@ export function AdminApp() {
                 ? session.mode === 'browser'
                   ? `Cấu hình của ${session.username} được lưu trên trình duyệt này (phù hợp Vercel).`
                   : `Cấu hình & lịch xếp gần nhất của ${session.username} được lưu trên server.`
-                : 'Dữ liệu được giữ trên trình duyệt. Đăng nhập hoangbui24 để lưu cấu hình theo tài khoản.'}
+                : 'Đăng nhập tài khoản admin để cấu hình ca và xếp lịch.'}
             </p>
           </div>
         </aside>
@@ -449,7 +455,7 @@ export function AdminApp() {
               <p>{page.subtitle}</p>
             </header>
 
-            {tab === 'config' && (
+            {activeTab === 'config' && (
               <ScheduleConfig
                 shifts={shifts}
                 weekStart={weekStart}
@@ -467,7 +473,7 @@ export function AdminApp() {
                 onRemoveScheduleSlot={handleRemoveScheduleSlot}
               />
             )}
-            {tab === 'register' && (
+            {activeTab === 'register' && (
               <RegistrationBoard
                 registrationGrid={registrationGrid}
                 roster={roster}
@@ -483,7 +489,7 @@ export function AdminApp() {
                 onRemoveRegistrationSlot={handleRemoveRegistrationSlot}
               />
             )}
-            {tab === 'result' && (
+            {activeTab === 'result' && (
               <ScheduleResultView
                 shifts={shifts}
                 result={scheduleResult}

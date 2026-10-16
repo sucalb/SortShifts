@@ -3,6 +3,7 @@ import { analyzeLoneShifts } from '../src/utils/loneShifts';
 import { parseRegistrationImport } from '../src/utils/importRegistration';
 import { taFragmentationCost } from '../src/utils/shiftContiguity';
 import { findDoubleBookings } from '../src/utils/assignmentValidation';
+import { isAdmin, verifyLocalCredentials } from '../src/utils/localAuth';
 import { getAssignmentWarnings } from '../src/utils/assignmentValidation';
 import { scanShiftsFromSheetGrid } from '../src/utils/csvTemplateFill';
 import { buildScheduleFromSheetGrid } from '../src/utils/sheetShiftImport';
@@ -357,6 +358,11 @@ console.log('\n--- Ổn định & hiệu năng ---');
       if (l.some(x => x.day===sh.day && Math.min(x.end,sl.end)-Math.max(x.start,sl.start) > 30)) clash++;
       l.push({day:sh.day,start:sl.start,end:sl.end}); byName.set(n,l); } }
   check('0 xung đột giờ', clash === 0, clash + ' xung đột'); }
+
+console.log('\n--- Tài khoản ---');
+check('chỉ admin là admin', isAdmin('admin') && !isAdmin('hoangbui24') && !isAdmin(null));
+check('tài khoản cũ hoangbui24 không còn đăng nhập được', !(await verifyLocalCredentials('hoangbui24', '241202')));
+check('admin sai mật khẩu bị từ chối', !(await verifyLocalCredentials('admin', 'admin')));
 
 console.log(`\n${pass} pass, ${fail} fail`);
 process.exit(fail > 0 ? 1 : 0);

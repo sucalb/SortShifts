@@ -51,7 +51,7 @@ export function UserAuthPanel({
   onLogout,
 }: UserAuthPanelProps) {
   const [open, setOpen] = useState(false);
-  const [formUser, setFormUser] = useState('hoangbui24');
+  const [formUser, setFormUser] = useState('admin');
   const [formPass, setFormPass] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);

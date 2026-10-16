@@ -1,5 +1,5 @@
 import type { UserConfigSnapshot } from '../types';
-import { isValidUsername, verifyLocalCredentials } from '../utils/localAuth';
+import { isAdmin, isValidUsername, verifyLocalCredentials } from '../utils/localAuth';
 
 const AUTH_TOKEN_KEY = 'lich-auth-token';
 const AUTH_USER_KEY = 'lich-auth-user';
@@ -82,6 +82,8 @@ export function getStoredSession(): AuthSession | null {
     const username = localStorage.getItem(AUTH_USER_KEY);
     const modeRaw = localStorage.getItem(AUTH_MODE_KEY);
     if (!token || !username) return null;
+    // Tài khoản cũ đã bị xoá — không khôi phục phiên của nó
+    if (!isAdmin(username)) return null;
     const mode: AuthMode =
       modeRaw === 'browser' || token.startsWith('local:') ? 'browser' : 'server';
     return { token, username, mode };
