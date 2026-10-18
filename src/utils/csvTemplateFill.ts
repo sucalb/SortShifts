@@ -270,7 +270,9 @@ function buildTemplateIndex(grid: string[][]): Map<string, { row: number; nameCo
 
     const regionStart = Math.max(0, anchorCol - 2);
     const regionEnd = Math.min(grid[0]?.length ?? 40, anchorCol + 16);
-    const fromRow = 3;
+    // Dò từ đầu tab: tiêu đề "CẤP 3" nằm ngay dòng 3 (trên dòng ngày) — bắt đầu
+    // từ dòng 4 là mất cả khối cấp 3, app không thấy lớp nào và xếp đè giờ.
+    const fromRow = 0;
     const toRow = Math.min(grid.length - 1, 80);
 
     const timeCol = detectTimeCol(grid, regionStart, regionEnd, fromRow, toRow);
@@ -664,7 +666,9 @@ export function scanShiftsFromSheetGrid(grid: string[][]): SheetShiftScan {
 
     const regionStart = Math.max(0, anchorCol - 2);
     const regionEnd = Math.min(grid[0]?.length ?? 40, anchorCol + 16);
-    const fromRow = 3;
+    // Dò từ đầu tab: tiêu đề "CẤP 3" nằm ngay dòng 3 (trên dòng ngày) — bắt đầu
+    // từ dòng 4 là mất cả khối cấp 3, app không thấy lớp nào và xếp đè giờ.
+    const fromRow = 0;
     const toRow = Math.min(grid.length - 1, 80);
 
     const timeCol = detectTimeCol(grid, regionStart, regionEnd, fromRow, toRow);

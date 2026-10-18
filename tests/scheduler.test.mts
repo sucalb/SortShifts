@@ -259,6 +259,23 @@ console.log('\n--- Ghi lên Sheet ---');
   check('lớp 2 buổi: ghi đúng khung giờ', at(4) === 'A' && at(5) === 'B', JSON.stringify(fill.updates));
 }
 
+{ // Layout thật: tiêu đề "CẤP 3" nằm ở dòng 3 (index 2), ngay trên dòng ngày
+  const W = 12;
+  const g: string[][] = Array.from({ length: 10 }, () => Array(W).fill(''));
+  g[0][0] = 'LỊCH LÀM VIỆC MÔN TIẾNG ANH CƠ SỞ 1';
+  g[1][1] = 'TUẦN:';
+  g[2][1] = 'CẤP 3'; g[2][3] = 'THỨ HAI';
+  g[3][3] = '1/6/2026';
+  g[4][1] = '17:00 - 19:00'; g[4][4] = '12 B2';
+  g[5][1] = 'CẤP 2'; g[5][3] = 'THỨ HAI';
+  g[6][3] = '1/6/2026';
+  g[7][1] = '17:00 - 19:00'; g[7][4] = '8.1 B2\n(TÂN)';
+  const scan = scanShiftsFromSheetGrid(g);
+  check('đọc được khối CẤP 3 ở dòng 3', scan.shifts.some(x => x.level === 'cap3' && x.className === '12 B2'),
+        JSON.stringify(scan.shifts));
+  check('vẫn đọc được CẤP 2', scan.shifts.some(x => x.level === 'cap2' && x.className === '8.1 B2'));
+}
+
 console.log('\n--- Đồng bộ ca từ Sheet ---');
 {
   const W = 12;
