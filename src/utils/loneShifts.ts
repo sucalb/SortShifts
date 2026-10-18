@@ -13,6 +13,7 @@ import {
 } from './shiftContiguity';
 import { isSlotRegistrable, type SlotOverrides } from './slotAccess';
 import { getActiveRegistrationSlots } from './slotCatalog';
+import { taNameKey } from './taIdentity';
 
 /** Vì sao ca này bị xếp lẻ, không ghép được với ca nào liền kề. */
 export type LoneShiftReason =
@@ -82,40 +83,48 @@ export function analyzeLoneShifts(
   for (const shift of shifts) {
     eligibleByShift.set(
       shift.id,
-      new Set(getEligibleNamesForShift(shift, registrationGrid, slotOverrides)),
+      new Set(getEligibleNamesForShift(shift, registrationGrid, slotOverrides).map(taNameKey)),
     );
   }
 
+  // Gom theo khoá tên: "H.Long" ở ca này và "H.LONG" ở ca kế là một người —
+  // tách ra thì cả hai ca đều bị báo lẻ dù thực ra đã nối liền.
   const intervalsByTa = new Map<string, ShiftInterval[]>();
+  const displayByKey = new Map<string, string>();
   for (const asn of assignments) {
-    filledByShift.set(asn.shiftId, asn.staffIds.length);
+    const keys = [...new Set(asn.staffIds.map(taNameKey).filter(Boolean))];
+    filledByShift.set(asn.shiftId, keys.length);
     const interval = intervalByShift.get(asn.shiftId);
     if (!interval) continue;
-    for (const name of asn.staffIds) {
-      const list = intervalsByTa.get(name);
+    for (const raw of asn.staffIds) {
+      const key = taNameKey(raw);
+      if (key && !displayByKey.has(key)) displayByKey.set(key, raw.trim());
+    }
+    for (const key of keys) {
+      const list = intervalsByTa.get(key);
       if (list) list.push(interval);
-      else intervalsByTa.set(name, [interval]);
+      else intervalsByTa.set(key, [interval]);
     }
   }
 
   const registrationSlots = getActiveRegistrationSlots();
 
   /** TG có đăng ký khung giờ nào sát với ca này trong ngày không. */
-  const hasAdjacentRegistration = (name: string, interval: ShiftInterval): boolean => {
-    const key = name.toLowerCase();
+  const hasAdjacentRegistration = (key: string, interval: ShiftInterval): boolean => {
     return registrationSlots.some(
       (slot) =>
         isSlotRegistrable(slotOverrides, interval.day, slot.id) &&
         isAdjacentRange(slot, interval, gapMinutes) &&
         getRegisteredNamesForSlot(registrationGrid, interval.day, slot.id).some(
-          (n) => n.toLowerCase() === key,
+          (n) => taNameKey(n) === key,
         ),
     );
   };
 
   const entries: LoneShiftEntry[] = [];
 
-  for (const [name, intervals] of intervalsByTa) {
+  for (const [key, intervals] of intervalsByTa) {
+    const name = displayByKey.get(key) ?? key;
     for (const block of groupIntoBlocks(intervals, gapMinutes)) {
       if (block.intervals.length !== 1) continue;
 
@@ -129,12 +138,12 @@ export function analyzeLoneShifts(
         const otherInterval = intervalByShift.get(other.id);
         if (!otherInterval) return false;
         if (!isAdjacentRange(otherInterval, interval, gapMinutes)) return false;
-        return eligibleByShift.get(other.id)?.has(name) === true;
+        return eligibleByShift.get(other.id)?.has(key) === true;
       });
 
       let reason: LoneShiftReason;
       if (adjacentShifts.length === 0) {
-        reason = hasAdjacentRegistration(name, interval)
+        reason = hasAdjacentRegistration(key, interval)
           ? 'no-adjacent-shift'
           : 'no-registration';
       } else {
@@ -162,6 +171,6 @@ export function analyzeLoneShifts(
     entries,
     forcedCount: entries.length - fixableCount,
     fixableCount,
-    affectedTaCount: new Set(entries.map((e) => e.name)).size,
+    affectedTaCount: new Set(entries.map((e) => taNameKey(e.name))).size,
   };
 }

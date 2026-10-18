@@ -25,6 +25,8 @@ export interface AutoFillPlan {
   missSamples: string[];
   cs1: number;
   cs2: number;
+  /** Số ô ca trống được xoá tên cũ */
+  cleared: number;
   sheetTab?: string;
   templateCells?: number;
 }
@@ -65,8 +67,10 @@ export async function buildAutoFillPlan(
 
   const fill = fillFromSheetGrid(grid, shifts, result);
   const payload = buildCellUpdatesPayload(fill.updates, weekTabHint);
-  const cs1 = fill.updates.filter((u) => u.col < 24).length;
-  const cs2 = fill.updates.filter((u) => u.col >= 24).length;
+  const written = fill.updates.filter((u) => u.value.trim());
+  const cs1 = written.filter((u) => u.col < 24).length;
+  const cs2 = written.filter((u) => u.col >= 24).length;
+  const cleared = fill.updates.length - written.length;
 
   return {
     weekTabHint: payload.weekTabHint,
@@ -76,6 +80,7 @@ export async function buildAutoFillPlan(
     missSamples: fill.missSamples,
     cs1,
     cs2,
+    cleared,
     sheetTab,
     templateCells,
   };
@@ -101,10 +106,11 @@ export async function syncClassColorsFromSheet(
 export function formatAutoFillPreview(plan: AutoFillPlan): string {
   const tab = plan.sheetTab ? ` · ${plan.sheetTab}` : '';
   const cells = plan.templateCells ? ` · ${plan.templateCells} ô lớp trên Sheet` : '';
+  const clearNote = plan.cleared > 0 ? ` · xoá tên cũ ở ${plan.cleared} ca trống` : '';
   if (plan.missed > 0) {
-    return `Khớp ${plan.matched} ca (CS1: ${plan.cs1}, CS2: ${plan.cs2})${tab}${cells}, ${plan.missed} ca không khớp. ${plan.missSamples.slice(0, 2).join('; ')}`;
+    return `Khớp ${plan.matched} ca (CS1: ${plan.cs1}, CS2: ${plan.cs2})${tab}${cells}, ${plan.missed} ca không khớp${clearNote}. ${plan.missSamples.slice(0, 2).join('; ')}`;
   }
-  return `Sẽ ghi ${plan.matched} ô (CS1: ${plan.cs1}, CS2: ${plan.cs2})${tab}${cells}`;
+  return `Sẽ ghi ${plan.matched} ô (CS1: ${plan.cs1}, CS2: ${plan.cs2})${tab}${cells}${clearNote}`;
 }
 
 export interface SheetPullResult {

@@ -9,7 +9,8 @@ import {
   getWeekDates,
 } from '../data/constants';
 import { getShiftTimeSlot } from '../utils/timeUtils';
-import type { ScheduleResult } from '../utils/scheduler';
+import { recomputeScheduleResult, type ScheduleResult } from '../utils/scheduler';
+import { taNameKey } from '../utils/taIdentity';
 import {
   getScheduleSlotsForKey,
   type ScheduleSlotsMap,
@@ -70,7 +71,7 @@ function EditableAssignmentBlock({
   slotOverrides: SlotOverrides | undefined;
   onUpdate: (staffIds: string[]) => void;
 }) {
-  const filled = assigned.length;
+  const filled = new Set(assigned.map(taNameKey).filter(Boolean)).size;
   const missing = shift.staffNeeded - filled;
   const isPartial = missing > 0 && filled > 0;
   const isEmpty = filled === 0;
@@ -272,6 +273,10 @@ export function ScheduleResultView({
     openPrintableHtml(exportScheduleHtml(shifts, result, weekStart));
   };
 
+  // Tính lại từ phân công hiện tại thay vì tin số đã lưu lúc bấm xếp: sau khi
+  // đồng bộ ca từ Sheet hay đổi số TG cần, số lưu sẵn đã cũ và báo sai ca thiếu.
+  const live = result ? recomputeScheduleResult(result.assignments, shifts) : null;
+
   return (
     <div className="panel">
       <div className="panel-header">
@@ -303,7 +308,7 @@ export function ScheduleResultView({
         onSyncFromSheet={onSyncFromSheet}
       />
 
-      {result && (
+      {result && live && (
         <>
           <p className="edit-mode-hint">
             Bạn có thể sửa TG trực tiếp trên từng ca. Gõ tên để tìm — cảnh báo đỏ = trùng ca hoặc
@@ -312,20 +317,20 @@ export function ScheduleResultView({
 
           <div className="stats-bar">
             <div className="stat">
-              <span className="stat-value">{result.stats.totalShifts}</span>
+              <span className="stat-value">{live.stats.totalShifts}</span>
               <span className="stat-label">Tổng ca</span>
             </div>
             <div className="stat">
-              <span className="stat-value">{result.stats.totalSlotsNeeded}</span>
+              <span className="stat-value">{live.stats.totalSlotsNeeded}</span>
               <span className="stat-label">Cần người</span>
             </div>
             <div className="stat stat-success">
-              <span className="stat-value">{result.stats.totalSlotsFilled}</span>
+              <span className="stat-value">{live.stats.totalSlotsFilled}</span>
               <span className="stat-label">Đã xếp</span>
             </div>
             <div className="stat stat-warning">
               <span className="stat-value">
-                {result.stats.totalSlotsNeeded - result.stats.totalSlotsFilled}
+                {live.stats.totalSlotsNeeded - live.stats.totalSlotsFilled}
               </span>
               <span className="stat-label">Còn thiếu</span>
             </div>
@@ -338,11 +343,11 @@ export function ScheduleResultView({
             slotOverrides={slotOverrides}
           />
 
-          {result.unfulfilled.length > 0 && (
+          {live.unfulfilled.length > 0 && (
             <div className="alert alert-warning">
-              <strong>{result.unfulfilled.length} ca chưa đủ người:</strong>
+              <strong>{live.unfulfilled.length} ca chưa đủ người:</strong>
               <ul>
-                {result.unfulfilled.map(({ shift, missing }) => {
+                {live.unfulfilled.map(({ shift, missing }) => {
                   const slot = getShiftTimeSlot(shift);
                   return (
                     <li key={shift.id}>

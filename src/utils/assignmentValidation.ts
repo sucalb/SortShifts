@@ -4,6 +4,7 @@ import { getEligibleNamesForShift, type RegistrationGrid } from './registrationU
 import type { SlotOverrides } from './slotAccess';
 import { getShiftInterval, needsTravelGap, DEFAULT_TRAVEL_MINUTES } from './shiftContiguity';
 import { getShiftTimeSlot, shiftsConflict } from './timeUtils';
+import { taNameKey } from './taIdentity';
 
 export interface AssignmentWarning {
   type: 'conflict' | 'not_registered' | 'over_capacity' | 'travel';
@@ -23,7 +24,7 @@ export function getTravelClashShift(
   if (!interval || travelMinutes <= 0) return null;
   for (const asn of assignments) {
     if (asn.shiftId === excludeShiftId || asn.shiftId === shift.id) continue;
-    if (!asn.staffIds.includes(name)) continue;
+    if (!asn.staffIds.some((n) => taNameKey(n) === taNameKey(name))) continue;
     const other = shifts.find((s) => s.id === asn.shiftId);
     if (!other) continue;
     const otherInterval = getShiftInterval(other);
@@ -41,7 +42,7 @@ export function isNameAssignedToConflictingShift(
 ): boolean {
   for (const asn of assignments) {
     if (asn.shiftId === excludeShiftId) continue;
-    if (!asn.staffIds.includes(name)) continue;
+    if (!asn.staffIds.some((n) => taNameKey(n) === taNameKey(name))) continue;
     const other = shifts.find((s) => s.id === asn.shiftId);
     if (other && shiftsConflict(shift, other)) return true;
   }
@@ -57,7 +58,9 @@ export function getAssignmentWarnings(
   slotOverrides?: SlotOverrides,
 ): AssignmentWarning[] {
   const warnings: AssignmentWarning[] = [];
-  const eligible = new Set(getEligibleNamesForShift(shift, registrationGrid, slotOverrides));
+  const eligible = new Set(
+    getEligibleNamesForShift(shift, registrationGrid, slotOverrides).map(taNameKey),
+  );
   const slot = getShiftTimeSlot(shift);
 
   if (staffIds.length > shift.staffNeeded) {
@@ -68,7 +71,7 @@ export function getAssignmentWarnings(
   }
 
   for (const name of staffIds) {
-    if (!eligible.has(name)) {
+    if (!eligible.has(taNameKey(name))) {
       warnings.push({
         type: 'not_registered',
         message: `${name}: chưa đăng ký ca ${DAY_LABELS[shift.day]} ${slot?.label ?? ''}`,
@@ -91,7 +94,8 @@ export function getAssignmentWarnings(
     }
   }
 
-  const dupes = staffIds.filter((n, i) => staffIds.indexOf(n) !== i);
+  const keys = staffIds.map(taNameKey);
+  const dupes = staffIds.filter((_, i) => keys.indexOf(keys[i]) !== i);
   for (const name of [...new Set(dupes)]) {
     warnings.push({ type: 'conflict', message: `${name}: bị gán trùng trong cùng ca` });
   }
@@ -120,8 +124,9 @@ export function findDoubleBookings(assignments: Assignment[], shifts: Shift[]): 
   for (const asn of assignments) {
     const shift = shiftById.get(asn.shiftId);
     if (!shift) continue;
-    for (const raw of asn.staffIds) {
-      const key = raw.trim().toLowerCase();
+    for (const raw of new Set(asn.staffIds.map(taNameKey))) {
+      const key = raw;
+      if (!key) continue;
       const list = byName.get(key);
       if (list) list.push(shift);
       else byName.set(key, [shift]);
@@ -129,7 +134,7 @@ export function findDoubleBookings(assignments: Assignment[], shifts: Shift[]): 
   }
 
   const display = new Map<string, string>();
-  for (const asn of assignments) for (const n of asn.staffIds) display.set(n.trim().toLowerCase(), n.trim());
+  for (const asn of assignments) for (const n of asn.staffIds) display.set(taNameKey(n), n.trim());
 
   const out: DoubleBooking[] = [];
   for (const [key, list] of byName) {

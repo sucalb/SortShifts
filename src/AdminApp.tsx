@@ -334,7 +334,7 @@ export function AdminApp() {
       setTab('register');
       return;
     }
-    const result = autoSchedule(shifts, registrationGrid, slotOverrides, fixedTaMap);
+    const result = autoSchedule(shifts, registrationGrid, slotOverrides, fixedTaMap, { roster });
     setScheduleResult(result);
 
     try {
@@ -351,7 +351,7 @@ export function AdminApp() {
     } catch {
       /* ignore auto-push errors */
     }
-  }, [shifts, registrationGrid, slotOverrides, fixedTaMap, weekStart, session]);
+  }, [shifts, registrationGrid, slotOverrides, fixedTaMap, roster, weekStart, session]);
 
   const handleUpdateAssignment = useCallback(
     (shiftId: string, staffIds: string[]) => {

@@ -13,6 +13,7 @@ import {
 } from './shiftContiguity';
 import type { SlotOverrides } from './slotAccess';
 import type { TeachingAssistant } from '../data/teachingAssistants';
+import { createTaCanonicalizer, taNameKey, uniqueTaNames } from './taIdentity';
 
 export interface TaShiftSummaryRow {
   abbreviation: string;
@@ -31,8 +32,10 @@ export interface ScheduleResult {
   };
 }
 
+/** Số người khác nhau trong ca — "T.Phú" và "T.PHÚ" là một người, không tính đủ 2 chỗ. */
 function getAssignedCount(shiftId: string, assignments: Assignment[]): number {
-  return assignments.find((a) => a.shiftId === shiftId)?.staffIds.length ?? 0;
+  const names = assignments.find((a) => a.shiftId === shiftId)?.staffIds ?? [];
+  return new Set(names.map(taNameKey).filter(Boolean)).size;
 }
 
 function resolveTa(roster: TeachingAssistant[], name: string): TeachingAssistant | undefined {
@@ -127,7 +130,11 @@ export function recomputeScheduleResult(
     .filter((x): x is { shift: Shift; missing: number } => x !== null);
 
   const totalSlotsNeeded = shifts.reduce((sum, s) => sum + s.staffNeeded, 0);
-  const totalSlotsFilled = assignments.reduce((sum, a) => sum + a.staffIds.length, 0);
+  // Chỉ tính phần đáp ứng nhu cầu của ca — xếp dư người không bù cho ca khác.
+  const totalSlotsFilled = shifts.reduce(
+    (sum, s) => sum + Math.min(s.staffNeeded, getAssignedCount(s.id, assignments)),
+    0,
+  );
 
   return {
     unfulfilled,
@@ -148,6 +155,8 @@ export interface AutoScheduleOptions {
   weights?: Partial<ContiguityWeights>;
   /** Số vòng tối ưu lại sau khi xếp lần đầu */
   maxImprovePasses?: number;
+  /** Danh sách TG — để quy họ tên / cách viết khác nhau về cùng một người */
+  roster?: TeachingAssistant[];
 }
 
 const EPS = 1e-9;
@@ -165,6 +174,9 @@ export function autoSchedule(
     maxImprovePasses = 6,
   } = options;
   const weights: ContiguityWeights = { ...DEFAULT_CONTIGUITY_WEIGHTS, ...options.weights };
+  // Mọi tên (đăng ký, TG cố định) đều quy về một cách viết, nếu không cùng một
+  // người viết hoa/thường khác nhau sẽ bị coi là hai người và xếp trùng giờ.
+  const canonical = createTaCanonicalizer(options.roster);
 
   // --- Dữ liệu tra cứu ---
   const intervalByShift = new Map<string, ShiftInterval>();
@@ -176,11 +188,14 @@ export function autoSchedule(
     const interval = getShiftInterval(shift);
     if (interval) intervalByShift.set(shift.id, interval);
 
-    const eligible = getEligibleNamesForShift(shift, registrationGrid, slotOverrides);
+    const eligible = uniqueTaNames(
+      getEligibleNamesForShift(shift, registrationGrid, slotOverrides),
+      canonical,
+    );
     eligibleByShift.set(shift.id, eligible);
     eligibleSetByShift.set(shift.id, new Set(eligible));
 
-    const fixed = getFixedTasForShift(shift, fixedTaMap);
+    const fixed = uniqueTaNames(getFixedTasForShift(shift, fixedTaMap), canonical);
     fixedByShift.set(shift.id, fixed);
   }
 

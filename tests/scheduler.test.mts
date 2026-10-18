@@ -5,7 +5,8 @@ import { taFragmentationCost } from '../src/utils/shiftContiguity';
 import { findDoubleBookings } from '../src/utils/assignmentValidation';
 import { isAdmin, verifyLocalCredentials } from '../src/utils/localAuth';
 import { getAssignmentWarnings } from '../src/utils/assignmentValidation';
-import { scanShiftsFromSheetGrid } from '../src/utils/csvTemplateFill';
+import { scanShiftsFromSheetGrid, fillFromSheetGrid } from '../src/utils/csvTemplateFill';
+import { recomputeScheduleResult } from '../src/utils/scheduler';
 import { buildScheduleFromSheetGrid } from '../src/utils/sheetShiftImport';
 import { SCHEDULE_SLOTS, REGISTRATION_SLOTS } from '../src/data/constants';
 import type { DayOfWeek, Shift } from '../src/types';
@@ -198,6 +199,65 @@ console.log('\n--- Báo cáo ca lẻ ---');
 { const g = emptyGrid(); g[5]!['reg-2']='A'; g[5]!['reg-3']='A';
   const ss = [shift('am',5,'cs1c3-2'), shift('pm',5,'cs1c3-3')];
   check('nghỉ trưa -> 2 cụm rời', analyzeLoneShifts(autoSchedule(ss,g).assignments, ss, g).entries.length === 2); }
+
+console.log('\n--- Cùng một TG viết tên khác nhau ---');
+{ // Đăng ký "T.Phú", GV cố định ghi "T.PHÚ": trước đây bị coi là 2 người -> xếp trùng giờ
+  const g = emptyGrid(); g[2]!['reg-5'] = 'T.Phú';
+  const ss = [shift('fixed',2,'cs1c3-5',{teacher:'GV1'}), shift('free',2,'cs1c3-5')];
+  const r = autoSchedule(ss, g, undefined, { GV1:['T.PHÚ'] });
+  check('không xếp trùng giờ khi khác hoa/thường', findDoubleBookings(r.assignments, ss).length === 0,
+        JSON.stringify(r.assignments));
+  check('ca còn lại báo thiếu', r.unfulfilled.length === 1, JSON.stringify(r.unfulfilled.map(u=>u.shift.id))); }
+{ // Dấu tổ hợp (NFD) từ Mac/iPhone với dấu dựng sẵn (NFC)
+  const g = emptyGrid(); g[2]!['reg-5'] = 'T.Phú, T.Phú';
+  const ss = [shift('a',2,'cs1c3-5'), shift('b',2,'cs1c3-5')];
+  const r = autoSchedule(ss, g);
+  check('NFD/NFC là một người', r.stats.totalSlotsFilled === 1, JSON.stringify(r.assignments)); }
+{ // Họ tên đầy đủ và ký hiệu trong danh sách TG
+  const g = emptyGrid(); g[2]!['reg-5'] = 'Thiện Phú, T.Phú';
+  const ss = [shift('a',2,'cs1c3-5'), shift('b',2,'cs1c3-5')];
+  const r = autoSchedule(ss, g, undefined, {}, { roster: [{ fullName: 'Thiện Phú', abbreviation: 'T.Phú' }] });
+  check('họ tên = ký hiệu', r.stats.totalSlotsFilled === 1, JSON.stringify(r.assignments));
+  check('ghi theo ký hiệu', r.assignments[0]?.staffIds[0] === 'T.Phú', JSON.stringify(r.assignments)); }
+{ const ss = [shift('a',0,'cs1c3-5',{staffNeeded:2})];
+  const rr = recomputeScheduleResult([{ shiftId:'a', staffIds:['H.Long','H.LONG'] }], ss);
+  check('một người ghi 2 lần không tính đủ 2 chỗ', rr.unfulfilled[0]?.missing === 1, JSON.stringify(rr)); }
+{ const ss = [shift('a',0,'cs1c3-5',{staffNeeded:1}), shift('b',0,'cs1c3-6',{staffNeeded:1})];
+  const rr = recomputeScheduleResult([{ shiftId:'a', staffIds:['A','B'] }], ss);
+  check('ca dư người không bù cho ca thiếu', rr.stats.totalSlotsFilled === 1, JSON.stringify(rr.stats)); }
+{ const g = emptyGrid(); g[0]!['reg-5']='H.Long'; g[0]!['reg-6']='H.Long';
+  const ss = [shift('s1',0,'cs1c3-5'), shift('s2',0,'cs1c3-6')];
+  const rep = analyzeLoneShifts([{ shiftId:'s1', staffIds:['H.Long'] }, { shiftId:'s2', staffIds:['H.LONG'] }], ss, g);
+  check('ca lẻ: H.Long + H.LONG liền nhau không bị báo lẻ', rep.entries.length === 0, JSON.stringify(rep.entries.map(e=>e.name))); }
+
+console.log('\n--- Ghi lên Sheet ---');
+{
+  const W = 12;
+  const g: string[][] = Array.from({ length: 8 }, () => Array(W).fill(''));
+  g[0][0] = 'LỊCH LÀM VIỆC MÔN TIẾNG ANH CƠ SỞ 1';
+  g[3][1] = 'CẤP 3';
+  g[4][1] = '7:00 - 9:00';
+  g[4][3] = 'T.PHÚ'; g[4][4] = '6.1 B2';   // tên cũ từ lần xếp trước
+  g[5][3] = '';      g[5][4] = '8.2 B1';
+  const ss = [shift('x',0,'cs1c3-0',{className:'6.1 B2'}), shift('y',0,'cs1c3-0',{className:'8.2 B1'})];
+  const fill = fillFromSheetGrid(g, ss, { assignments: [{ shiftId:'y', staffIds:['T.Phú'] }], unfulfilled: [], stats: { totalShifts:2, totalSlotsNeeded:2, totalSlotsFilled:1 } });
+  const at = (r: number) => fill.updates.find(u => u.row === r + 1 && u.col === 4)?.value;
+  check('ca trống được xoá tên cũ', at(4)?.trim() === '' && at(4) !== undefined, JSON.stringify(fill.updates));
+  check('ca có người được ghi tên', at(5) === 'T.PHÚ', JSON.stringify(fill.updates));
+  check('ô xoá không tính là đã ghi', fill.matched === 1, String(fill.matched));
+}
+{ // Cùng một lớp hai buổi sát nhau: phải ghi đúng ô của khung giờ của nó
+  const W = 12;
+  const g: string[][] = Array.from({ length: 8 }, () => Array(W).fill(''));
+  g[0][0] = 'LỊCH LÀM VIỆC MÔN TIẾNG ANH CƠ SỞ 1';
+  g[3][1] = 'CẤP 3';
+  g[4][1] = '9:00 - 10:30'; g[4][4] = '10 B1';
+  g[5][1] = '10:00 - 12:00'; g[5][4] = '10 B1';
+  const ss = [shift('late',0,'cs1c3-2',{className:'10 B1'}), shift('early',0,'cs1c3-1',{className:'10 B1'})];
+  const fill = fillFromSheetGrid(g, ss, { assignments: [{ shiftId:'late', staffIds:['B'] }, { shiftId:'early', staffIds:['A'] }], unfulfilled: [], stats: { totalShifts:2, totalSlotsNeeded:2, totalSlotsFilled:2 } });
+  const at = (r: number) => fill.updates.find(u => u.row === r + 1)?.value;
+  check('lớp 2 buổi: ghi đúng khung giờ', at(4) === 'A' && at(5) === 'B', JSON.stringify(fill.updates));
+}
 
 console.log('\n--- Đồng bộ ca từ Sheet ---');
 {

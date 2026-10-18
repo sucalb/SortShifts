@@ -115,7 +115,8 @@ function fillCells(payload) {
 
   for (var i = 0; i < updates.length; i++) {
     var u = updates[i];
-    if (!u || !u.value) continue;
+    // Chuỗi rỗng / dấu cách = xoá tên cũ ở ca không còn ai.
+    if (!u || u.value === undefined || u.value === null) continue;
     var writeResult = trySetCell(sheet, u.row, u.col, String(u.value).trim());
     if (writeResult.ok) {
       written++;

@@ -32,6 +32,13 @@ export interface FillTemplateResult {
   missSamples: string[];
 }
 
+/**
+ * Giá trị ghi vào ô để xoá tên cũ. Apps Script đã triển khai bỏ qua giá trị
+ * rỗng nhưng có trim() trước khi ghi — gửi một dấu cách là ô thành trống, không
+ * cần deploy lại script.
+ */
+export const CLEAR_CELL = ' ';
+
 const LEVEL_ORDER: Level[] = ['cap3', 'cap2', 'cap1'];
 const FACILITY_ANCHORS: { id: Facility; text: string; minCol: number }[] = [
   { id: 'coso1', text: 'CƠ SỞ 1', minCol: 0 },
@@ -238,6 +245,22 @@ function timeMatches(a: string, b: string): boolean {
   return Math.abs(sa - sb) <= 60;
 }
 
+/**
+ * Ô đúng khung giờ được xét trước ô lệch giờ. `timeMatches` chấp nhận lệch tới
+ * 60 phút, nên nếu duyệt theo thứ tự trên Sheet thì một lớp có hai buổi sát
+ * nhau trong ngày có thể bị ghi tên sang ô của buổi kia.
+ */
+function entriesExactTimeFirst<T>(index: Map<string, T>, slot: string): [string, T][] {
+  const target = normalizeTime(slot);
+  const exact: [string, T][] = [];
+  const rest: [string, T][] = [];
+  for (const entry of index) {
+    if (entry[0].split('|')[3] === target) exact.push(entry);
+    else rest.push(entry);
+  }
+  return [...exact, ...rest];
+}
+
 function buildTemplateIndex(grid: string[][]): Map<string, { row: number; nameCol: number }[]> {
   const index = new Map<string, { row: number; nameCol: number }[]>();
 
@@ -291,7 +314,7 @@ function findCell(
   const nameCompact = compactClass(className);
   const labelCompact = compactClass(classLabel);
 
-  for (const [key, list] of index) {
+  for (const [key, list] of entriesExactTimeFirst(index, slot)) {
     const parts = key.split('|');
     if (parts.length < 5) continue;
     if (parts[0] !== facility || parts[1] !== level || parseInt(parts[2], 10) !== day) continue;
@@ -346,7 +369,7 @@ function findScannedCell(
   const nameCompact = compactClass(className);
   const labelCompact = compactClass(classLabel);
 
-  for (const [key, list] of index) {
+  for (const [key, list] of entriesExactTimeFirst(index, slot)) {
     const parts = key.split('|');
     if (parts.length < 5) continue;
     if (parts[0] !== facility || parts[1] !== level || parseInt(parts[2], 10) !== day) continue;
@@ -384,13 +407,14 @@ export function fillFromScannedCells(
 
   for (const shift of shifts) {
     const staff = result.assignments.find((a) => a.shiftId === shift.id)?.staffIds ?? [];
-    if (staff.length === 0) continue;
+    // Ca không có ai vẫn phải dò ô của nó: ô còn tên từ lần xếp trước thì phải
+    // xoá, không thì Sheet hiện người cũ — vừa trông như trùng giờ, vừa che ca thiếu.
 
     const slot = getShiftTimeSlot(shift);
     if (!slot) continue;
 
     const classLabel = formatClassLabel(shift);
-    const names = staff.map((n) => n.toUpperCase()).join(', ');
+    const names = staff.length > 0 ? staff.map((n) => n.toUpperCase()).join(', ') : CLEAR_CELL;
     const hit = findScannedCell(
       index,
       shift.facility,
@@ -403,6 +427,7 @@ export function fillFromScannedCells(
     );
 
     if (!hit) {
+      if (staff.length === 0) continue;
       missed++;
       if (missSamples.length < 3) {
         missSamples.push(
@@ -412,7 +437,7 @@ export function fillFromScannedCells(
       continue;
     }
 
-    matched++;
+    if (staff.length > 0) matched++;
     updates.push({
       row: hit.row,
       col: hit.nameCol,
@@ -446,13 +471,14 @@ function fillGridTemplate(
 
   for (const shift of shifts) {
     const staff = result.assignments.find((a) => a.shiftId === shift.id)?.staffIds ?? [];
-    if (staff.length === 0) continue;
+    // Ca không có ai vẫn phải dò ô của nó: ô còn tên từ lần xếp trước thì phải
+    // xoá, không thì Sheet hiện người cũ — vừa trông như trùng giờ, vừa che ca thiếu.
 
     const slot = getShiftTimeSlot(shift);
     if (!slot) continue;
 
     const classLabel = formatClassLabel(shift);
-    const names = staff.map((n) => n.toUpperCase()).join(', ');
+    const names = staff.length > 0 ? staff.map((n) => n.toUpperCase()).join(', ') : CLEAR_CELL;
     const hit = findCell(
       grid,
       index,
@@ -466,6 +492,7 @@ function fillGridTemplate(
     );
 
     if (!hit) {
+      if (staff.length === 0) continue;
       missed++;
       if (missSamples.length < 3) {
         missSamples.push(
@@ -475,7 +502,7 @@ function fillGridTemplate(
       continue;
     }
 
-    matched++;
+    if (staff.length > 0) matched++;
     updates.push({
       row: hit.row + 1,
       col: hit.nameCol + 1,
